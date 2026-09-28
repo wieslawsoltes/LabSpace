@@ -45,7 +45,7 @@ public sealed class FrontPanelSurface : CanvasViewport
                 var current = Session.DisplayValue(node);
                 if (current.Kind == ValueKind.Boolean) Safe(() => Session.SetText(node.Id, current.Boolean ? "false" : "true"));
                 else if (current.Kind == ValueKind.Enum) Safe(() => Session.SetText(node.Id, ((current.Integer + 1) % current.Type.Labels.Length).ToString(System.Globalization.CultureInfo.InvariantCulture)));
-                else if (current.Type.IsNumeric && _item.Widget is "Knob" or "Slider") { Session.BeginGesture(); _knob = _item.Widget == "Knob"; _slider = !_knob; Canvas.CapturePointer(e.Pointer); }
+                else if (current.Type.IsNumeric && _item.Widget is "Knob" or "Slider") { Session.BeginGesture(); _operating = true; Canvas.CapturePointer(e.Pointer); }
                 else if (current.Type.IsNumeric && _item.Widget == "Numeric" && _start.X < _item.Bounds.X + 16)
                 {
                     var delta = _start.Y < _item.Bounds.Y + 43 ? 1 : -1;
@@ -85,7 +85,10 @@ public sealed class FrontPanelSurface : CanvasViewport
         else if (_operating)
         {
             var node = Session.Instrument.Diagram.Nodes.First(n => n.Id == _item.NodeId);
-            node.Value = Math.Clamp(_item.Widget == "Slider" ? _item.Minimum + (p.X - _bounds.X) / _bounds.Width * (_item.Maximum - _item.Minimum) : _value + (dx - dy) / 180 * (_item.Maximum - _item.Minimum), _item.Minimum, _item.Maximum);
+            var next = Math.Clamp(_item.Widget == "Slider" ? _item.Minimum + (p.X - _bounds.X) / _bounds.Width * (_item.Maximum - _item.Minimum) : _value + (dx - dy) / 180 * (_item.Maximum - _item.Minimum), _item.Minimum, _item.Maximum);
+            if (node.Kind == "typed-control" && node.Type is { } type)
+                node.Text = ValueConversion.Coerce(Value.Numeric(next), type).ToString();
+            else node.Value = next;
             Session.Notify(SessionChange.View);
         }
     }
