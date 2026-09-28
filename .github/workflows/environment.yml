@@ -1,0 +1,23 @@
+name: Toolchain verification
+on:
+  push:
+    paths: ['.github/workflows/environment.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+      - name: Verify stable package versions
+        run: |
+          dotnet --version
+          python3 - <<'PY'
+          import json, urllib.request
+          for name in ['uno.sdk','uno.winui','skiasharp','skiasharp.nativeassets.webassembly','xunit','microsoft.net.test.sdk']:
+              data=json.load(urllib.request.urlopen('https://api.nuget.org/v3-flatcontainer/'+name+'/index.json'))
+              print(name, [v for v in data['versions'] if '-' not in v][-5:])
+          PY
