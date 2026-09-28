@@ -10,6 +10,10 @@ public static class IconPainter
         c.Save(); c.Translate(r.Left, r.Top); c.Scale(r.Width / 24, r.Height / 24); var ink = LabDrawing.Color("#424242");
         switch (name)
         {
+            case "quick-drop":
+                d.Circle(c, 10, 9, 6, SKColors.White); d.Circle(c, 10, 9, 6, ink, false);
+                d.Line(c, 14, 14, 21, 21, ink, 2); d.Line(c, 10, 5, 10, 13, ink); d.Line(c, 6, 9, 14, 9, ink);
+                break;
             case "run": using (var p = new SKPath()) { p.MoveTo(4, 5); p.LineTo(11, 5); p.LineTo(11, 2); p.LineTo(21, 12); p.LineTo(11, 22); p.LineTo(11, 18); p.LineTo(4, 18); p.Close(); d.Path(c, p, SKColors.White, fill: true); d.Path(c, p, ink, 1.4f); } break;
             case "run-broken":
                 Draw(c, "run", new(0, 0, 24, 24), d);

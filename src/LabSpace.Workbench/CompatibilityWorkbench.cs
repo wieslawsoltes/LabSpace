@@ -18,7 +18,7 @@ public sealed partial class InstrumentWorkbench
     private void InitializeCompatibility(Grid root, StackPanel tools)
     {
         tools.Children.Add(LabTheme.Separator());
-        tools.Children.Add(Command("quick-drop", "Quick Drop (Ctrl+Space)", () => OpenQuickDrop(View == StudioView.FrontPanel), "⌕"));
+        tools.Children.Add(Command("quick-drop", "Quick Drop (Ctrl+Space)", () => OpenQuickDrop(View == StudioView.FrontPanel), "quick-drop"));
         tools.Children.Add(Command("structure", "Tunnels and shift registers", () => { if (Session.SelectedNode is { } node && NodeCatalog.Resolve(node).IsStructure) OpenStructure(node); else Session.Message("Select a For, While, Case or SubVI structure first."); }, "VI"));
         tools.Children.Add(Command("step-into", "Step into (F11)", Session.StepInto, "↓"));
         _viewTabs.Children.Add(Command("true-branch", "TRUE case", () => SwitchCase(false), null, true, true));
@@ -35,6 +35,16 @@ public sealed partial class InstrumentWorkbench
             Session.Message("Place " + entry.Title + ": click the canvas. Escape cancels.");
         };
         QuickDrop.Dismissed += CloseOverlay;
+        // Buttons consume Space for their own activation. Observe the routed key even
+        // when handled so Ctrl+Space remains a studio command after toolbar/tab clicks.
+        AddHandler(KeyDownEvent, new KeyEventHandler((_, e) =>
+        {
+            if (e.Key != VirtualKey.Space || _dialogOpen) return;
+            var control = Microsoft.UI.Input.InputKeyboardSource.GetKeyStateForCurrentThread(VirtualKey.Control);
+            if ((control & Windows.UI.Core.CoreVirtualKeyStates.Down) == 0) return;
+            OpenQuickDrop(View == StudioView.FrontPanel);
+            e.Handled = true;
+        }), true);
         var quick = new KeyboardAccelerator { Key = VirtualKey.Space, Modifiers = VirtualKeyModifiers.Control };
         quick.Invoked += (_, e) => { if (_dialogOpen) return; OpenQuickDrop(View == StudioView.FrontPanel); e.Handled = true; }; KeyboardAccelerators.Add(quick);
         var step = new KeyboardAccelerator { Key = VirtualKey.F11 };
