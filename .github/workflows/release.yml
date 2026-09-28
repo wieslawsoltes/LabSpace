@@ -5,7 +5,7 @@ on:
     tags: ['v*']
     paths:
       - '.github/workflows/release.yml'
-      - 'src/**/*.csproj'
+      - 'src/**'
       - 'global.json'
       - 'Directory.Build.props'
   workflow_dispatch:
