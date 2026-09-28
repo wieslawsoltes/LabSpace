@@ -17,21 +17,17 @@ jobs:
       - uses: actions/setup-dotnet@v4
         with:
           global-json-file: global.json
-      - name: Complete typed front-panel gestures
+      - name: Align gesture conversion API
         run: |
           python3 - <<'PY'
           from pathlib import Path
           p=Path('src/LabSpace.Controls/FrontPanelSurface.cs')
-          s=p.read_text().replace('_knob = _item.Widget == "Knob"; _slider = !_knob;', '_operating = true;')
-          s=s.replace('            node.Value = Math.Clamp(_item.Widget', '            var next = Math.Clamp(_item.Widget')
-          s=s.replace('            Session.Notify(SessionChange.View);', '            if (node.Kind == "typed-control" && node.Type is { } type)\n                node.Text = ValueConversion.Coerce(Value.Numeric(next), type).ToString();\n            else node.Value = next;\n            Session.Notify(SessionChange.View);')
-          p.write_text(s)
+          p.write_text(p.read_text().replace('ValueConversion.Coerce(', 'ValueConversion.Convert('))
           PY
           git config user.name 'Wiesław Šoltés'
           git config user.email 'wieslawsoltes@users.noreply.github.com'
           git add src
-          git commit -m 'fix: operate typed numeric knobs and sliders through exact typed values'
-          git push
+          if ! git diff --cached --quiet; then git commit -m 'fix: use typed value conversion in instrument gestures'; git push; fi
       - name: Test executable semantics and routing
         run: dotnet test tests/LabSpace.Tests -c Release --logger 'trx;LogFileName=typed.trx' --results-directory artifacts/tests
       - name: Build desktop integration
