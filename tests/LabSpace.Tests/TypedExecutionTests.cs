@@ -24,9 +24,9 @@ public sealed class TypedExecutionTests
     [Fact] public void IntegerOverflowIsRejectedInLiterals() => Assert.Throws<OverflowException>(() => ValueLiteral.Parse(LabType.Scalar(ValueKind.UInt8), "256"));
     [Fact] public void StructuralEqualityIncludesRankAndOrderedFields()
     {
-        var a = LabType.Cluster(new("id", LabType.Int32)); var b = LabType.Cluster(new("id", LabType.Int32));
+        var a = LabType.Cluster(new TypeField("id", LabType.Int32)); var b = LabType.Cluster(new TypeField("id", LabType.Int32));
         Assert.Equal(a, b); Assert.Equal(a.GetHashCode(), b.GetHashCode()); Assert.NotEqual(LabType.Array(a), LabType.Array(b, 2));
-        Assert.NotEqual(a, LabType.Cluster(new("other", LabType.Int32)));
+        Assert.NotEqual(a, LabType.Cluster(new TypeField("other", LabType.Int32)));
     }
     [Fact] public void RectangularArrayRetainsRankAndIndexesRows()
     {
@@ -37,7 +37,7 @@ public sealed class TypedExecutionTests
     [Fact] public void RaggedArrayIsRejected() => Assert.Throws<ArgumentException>(() => ValueLiteral.Parse(LabType.Array(LabType.Number, 2), "[[1],[2,3]]"));
     [Fact] public void ClusterRejectsDuplicateOrUnknownFields()
     {
-        var type = LabType.Cluster(new("x", LabType.Number));
+        var type = LabType.Cluster(new TypeField("x", LabType.Number));
         Assert.Throws<ArgumentException>(() => ValueLiteral.Parse(type, "{\"x\":1,\"x\":2}")); Assert.Throws<ArgumentException>(() => ValueLiteral.Parse(type, "{\"x\":1,\"y\":2}"));
     }
     [Fact] public void IntegerArithmeticWrapsWithoutDoublePrecisionLoss()
