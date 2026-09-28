@@ -8,6 +8,7 @@ namespace LabSpace.Documents;
 public static class ProjectSerializer
 {
     public const int MaximumBytes = 8 * 1024 * 1024;
+    private static readonly HashSet<string> Widgets = ["Numeric", "Knob", "Slider", "Gauge", "LED", "Switch", "Graph", "Chart", "String", "Array"];
     public static string Save(LabProject project)
     {
         Validate(project);
@@ -29,14 +30,14 @@ public static class ProjectSerializer
         var ids = new HashSet<string>(); var total = 0;
         foreach (var vi in project.Instruments)
         {
-            if (vi is null || !ids.Add(vi.Id) || string.IsNullOrWhiteSpace(vi.Name) || vi.Panel is null || vi.Panel.Count > 4096) throw new InvalidDataException("Invalid or duplicate VI.");
+            if (vi is null || string.IsNullOrWhiteSpace(vi.Id) || !ids.Add(vi.Id) || string.IsNullOrWhiteSpace(vi.Name) || vi.Panel is null || vi.Panel.Count > 4096) throw new InvalidDataException("Invalid or duplicate VI.");
             Check(vi.Diagram, 0, ref total);
             var nodes = vi.Diagram.Nodes.Select(x => x.Id).ToHashSet(); var panels = new HashSet<string>();
             foreach (var item in vi.Panel)
             {
-                if (item is null || !panels.Add(item.Id) || !nodes.Contains(item.NodeId) || !double.IsFinite(item.Minimum) || !double.IsFinite(item.Maximum) || item.Maximum <= item.Minimum) throw new InvalidDataException("Invalid panel item or range.");
+                if (item is null || string.IsNullOrWhiteSpace(item.Id) || !panels.Add(item.Id) || !nodes.Contains(item.NodeId) || !Widgets.Contains(item.Widget) || !double.IsFinite(item.Minimum) || !double.IsFinite(item.Maximum) || item.Maximum <= item.Minimum) throw new InvalidDataException("Invalid panel item, widget or range.");
                 var b = item.Bounds;
-                if (!Finite(b.X, b.Y, b.Width, b.Height) || b.Width is < 20 or > 10000 || b.Height is < 20 or > 10000) throw new InvalidDataException("Invalid panel bounds.");
+                if (!Finite(b.X, b.Y, b.Width, b.Height) || b.Width is < 20 or > 10000 || b.Height is < 20 or > 10000 || Math.Abs(b.X) > 1000000 || Math.Abs(b.Y) > 1000000) throw new InvalidDataException("Invalid panel bounds.");
             }
         }
     }
@@ -48,6 +49,7 @@ public static class ProjectSerializer
         foreach (var node in graph.Nodes)
         {
             if (node is null || !ids.Add(node.Id) || string.IsNullOrEmpty(node.Id) || node.Kind is null || node.Label is null || node.Text is null || node.Parameters is null || !Finite(node.X, node.Y, node.Value) || node.Parameters.Count > 64 || node.Parameters.Values.Any(v => !double.IsFinite(v))) throw new InvalidDataException("Invalid node.");
+            if (!NodeCatalog.TryGet(node.Kind, out _)) throw new InvalidDataException($"Unsupported function '{node.Kind}'. This project requires an unavailable function; no changes were imported.");
             if (node.Text.Length > 1000000 || node.Label.Length > 4096 || Math.Abs(node.X) > 1000000 || Math.Abs(node.Y) > 1000000) throw new InvalidDataException("Node payload exceeds the limit.");
             if (node.Body is not null) Check(node.Body, depth + 1, ref total);
             if (node.Alternative is not null) Check(node.Alternative, depth + 1, ref total);
