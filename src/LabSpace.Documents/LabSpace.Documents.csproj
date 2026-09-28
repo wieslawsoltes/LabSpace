@@ -1,0 +1,1 @@
+<Project Sdk="Microsoft.NET.Sdk"><PropertyGroup><TargetFramework>net10.0</TargetFramework><Description>Versioned bounded project persistence and executable example VIs.</Description></PropertyGroup><ItemGroup><ProjectReference Include="../LabSpace.Core/LabSpace.Core.csproj" /></ItemGroup></Project>

@@ -1,0 +1,9 @@
+**/bin/
+**/obj/
+artifacts/
+node_modules/
+.vs/
+.idea/
+.DS_Store
+src/LabSpace.App/Assets/Fonts/*.ttf
+src/LabSpace.App/Assets/Fonts/OFL.txt

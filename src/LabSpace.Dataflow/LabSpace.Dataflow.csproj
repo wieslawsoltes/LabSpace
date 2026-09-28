@@ -1,0 +1,1 @@
+<Project Sdk="Microsoft.NET.Sdk"><PropertyGroup><TargetFramework>net10.0</TargetFramework><Description>Typed graph compiler and deterministic, bounded dataflow execution.</Description></PropertyGroup><ItemGroup><ProjectReference Include="../LabSpace.Signals/LabSpace.Signals.csproj" /></ItemGroup></Project>
