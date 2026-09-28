@@ -43,7 +43,7 @@ public sealed class FunctionPalette : Grid
                 if (index % 3 == 0) grid.RowDefinitions.Add(new() { Height = new(70) });
                 var local = item; var button = new LabButton(local.Title, () => AddRequested?.Invoke(local.Kind, string.IsNullOrEmpty(local.Widget) ? null : local.Widget)); button.Padding = new(2); button.HorizontalContentAlignment = HorizontalAlignment.Stretch;
                 var content = new StackPanel { Spacing = 4, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center };
-                var glyph = LabTheme.Text(local.Glyph, local.Glyph.Length > 3 ? 12 : 19, "#424242"); glyph.HorizontalAlignment = HorizontalAlignment.Center;
+                var glyph = LabTheme.Text(local.Glyph, local.Glyph.Length > 3 ? 11 : local.Glyph.Length > 2 ? 14 : 19, "#424242"); glyph.HorizontalAlignment = HorizontalAlignment.Center;
                 content.Children.Add(new Border { Child = glyph, Width = 34, Height = 28, Background = LabTheme.Brush(_controls ? "#DDDDDD" : "#FFF5CA"), BorderBrush = LabTheme.Brush("#A5A28A"), BorderThickness = new(1), Padding = new(2) });
                 var label = LabTheme.Text(local.Title, 10); label.TextWrapping = TextWrapping.Wrap; label.TextAlignment = TextAlignment.Center; label.MaxLines = 2; content.Children.Add(label); button.Content = content;
                 AutomationProperties.SetAutomationId(button, "palette-" + local.Kind + "-" + local.Widget); Entries[local.Kind + (local.Widget.Length == 0 ? "" : ":" + local.Widget)] = button;

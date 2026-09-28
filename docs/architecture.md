@@ -1,80 +1,93 @@
-# Architecture
+# Architecture and performance
 
-LabSpace separates the virtual instrument model, execution, editing, rendering and platform services. The browser is the real Uno WebAssembly application: there is no parallel JavaScript implementation of the dataflow engine.
+LabSpace separates document models, signal kernels, execution, editing, rendering, controls and hosting. No engine requires a XAML visual tree. Desktop and browser use the same C# implementation; JavaScript is limited to browser file/recovery interop and opt-in read-only diagnostics.
+
+## Dependency direction
 
 ```text
-                  Desktop host                 Browser host
-               Win32 / X11 / macOS             .NET WebAssembly
-                      │                             │
-                      └───────── App ──────────────┘
-                                  │
-                          Workbench + Storage
-                                  │
-                  Controls: diagram / panel / palette / inspector
-                                  │
-                         Skia render components
-                                  │
-                         Editing / transactions
-                            ┌─────┴──────┐
-                        Dataflow      Documents
-                            │            │
-                          Signals        │
-                            └─────┬──────┘
-                                 Core
+Core ── Signals
+  ├── Documents
+  └── Dataflow ── Editing ── Skia ── Controls ── Workbench ── App
+Storage ───────────────────────────────────────┘
 ```
 
-## Component contracts
+`LabSpace.Core` defines mutable authoring models (`LabProject`, `VirtualInstrument`, `Diagram`, `Node`, `Wire`, `PanelItem`), immutable runtime `Value` payloads and immutable `StructureContract` records. Diagram node identity also links a front-panel item. Each wire names a source output and a destination input. Runtime arrays are immutable; factories bound and copy caller data so downstream consumers cannot corrupt another branch.
 
-`LabSpace.Core` contains plain C# project, VI, node, wire and front-panel models. No Uno references are required to create or execute a project. Runtime values are immutable and array factories copy their inputs. Editing models are deliberately mutable inside a session transaction; hosts must not mutate them from background threads.
+The nine library projects are independently packable. The App project supplies the platform host, font assets and storage implementation. The UI projects target `net10.0-desktop` and `net10.0-browserwasm`; the engines use `net10.0`.
 
-`LabSpace.Signals` contains bounded numerical kernels. `Generate` supports sine, square and triangle sources plus deterministic noise. `Rms` uses scaled sum-of-squares; `Spectrum` is an iterative radix-2 FFT with a periodic Hann window, one-sided amplitude normalization and correct DC/Nyquist treatment. Moving-average state currently resets at each input block.
+## Definitions and compilation
 
-`LabSpace.Dataflow` validates and compiles a typed graph to a deterministic topological order. Every input has at most one source; outputs may fan out. Types must match exactly. Required disconnected terminals, dangling wires, multiple drivers, unknown functions and combinational cycles produce structured diagnostics. An explicit Feedback node breaks a cycle and supplies the previous completed frame's value. Compilation is cached by the editing session until a structural edit or document replacement.
+`NodeCatalog.Get(kind)` returns a general palette definition. `NodeCatalog.Resolve(node)` returns the instance's actual terminals, including typed connector nodes and immutable structure contracts. A weak cache keys resolution by model, kind, data type and contract identity. Replacing a contract invalidates its resolved definition without polling mutable lists.
 
-`ExecutionFrame.Step` evaluates one top-level node. Nested structures run as step-over operations, sharing the root cancellation token and node budget. For, While, Case and embedded SubVI bodies expose numeric connector input/output nodes. Case evaluates only its selected branch. Runtime exceptions include node identity and label. Incomplete frames do not commit pending feedback values.
+`GraphCompiler` validates unique node/wire identities, named output/input existence, exact supported-type compatibility, one input driver, required inputs, parameter finiteness, combinational cycles, nesting, body connectors and loop conditions. Optional unwired outputs must be explicitly declared. Invalid diagrams remain editable but do not execute. Compiled sources are `SourceTerminal(nodeId, outputName)` values rather than only node IDs.
 
-`LabSpace.Documents` uses a source-generated, versioned JSON serializer. It applies UTF-8 byte, object-count, nesting, coordinate and numeric limits before accepting a project. The format is original to LabSpace; the `.vi` names in the UI are human-readable instrument names, not NI binary payloads.
+A topological plan is built once per code-affecting revision. An explicit Feedback node breaks a cycle. Its prior value is scoped to an invocation path: root feedback observes the previous completed frame; repeated nested invocations can observe a staged prior-iteration value. Mutable model parameters are read at execution time, while connector/type changes invalidate compilation.
 
-`LabSpace.Editing.InstrumentSession` owns the current instrument, nested navigation, selection, probes, breakpoints, history, compiled execution plan and bounded chart history. Structural commands are atomic and undoable. Drag gestures preview directly in the model but retain one before-image and create one history item on release. Undo and redo have count and memory bounds. Selection and viewport changes do not create history or recompile the diagram.
+## Resumable execution
 
-`LabSpace.Skia` owns rendering only. Diagram and instrument renderers accept a canvas, session and visible world rectangle. Cached wire paths are rebuilt when geometry changes, not every execution frame. Off-screen nodes and wires are culled. Waveform traces use min/max pixel buckets, preserving extrema rather than simply dropping every nth sample. Fonts and paints are retained and disposed by their owners.
+`DataflowRuntime` owns logical time, deterministic random generation and committed feedback/register state. `ExecutionFrame` owns one compiled activation, typed arguments, primary values, named outputs and a cursor. `StructureActivation` owns the selected embedded body, iteration cursor, typed input values, register histories and numeric output builders.
 
-`LabSpace.Controls` supplies reusable Uno surfaces, viewport transforms, custom classic toolbar buttons, original vector icons, panes, function/control palettes and the property inspector. Pointer input uses the same DIP-to-world transform as rendering. Front-panel controls and block-diagram terminals share node IDs and data. Standard text-input, file-picker and popup primitives are retained for platform input services. Canvas elements have keyboard operation but not yet a full per-terminal accessibility tree.
+`Step()` preserves top-level step-over behavior. `StepInto()` advances one resumable transition; entering/returning from a structure can be a transition without evaluating another function. `ActiveFrame` identifies the deepest activation for a debugger. `Values[nodeId]` is a primary-result convenience; `GetOutput(nodeId, outputName)` and `Outputs` expose named terminals.
 
-`LabSpace.Workbench.InstrumentWorkbench` composes the editors, project explorer, document tabs, menu/toolbar commands, property inspector, context help and error list. The host injects `IProjectStorage` and loaded `LabFonts`. The studio owns its execution/recovery timers and unsubscribes when disposed.
+For loops combine an explicit count with indexed input lengths. While loops follow their condition and supply zero after indexed numeric inputs end. Output modes include last value, numeric indexing, conditional numeric indexing and numeric-array concatenation. Initialized registers recreate histories for each invocation; uninitialized registers retain successful state by call-site path. Zero iterations preserve register initialization/prior values and return empty collections.
 
-## Rendering decision
+Each root frame shares one node budget and cancellation token through all descendants. Cancellation is checked on every transition, including empty-body loops. Pending feedback/register dictionaries commit only after the root succeeds. Failure/abort cannot commit half a register transaction. This does not roll back arbitrary side effects or random-generator advancement. The runtime/session are caller-owned, not concurrent reentrant instances.
 
-The implementation uses **SkiaSharp through Uno's `SKCanvasElement`**, integrated with Uno's supported desktop and browser renderers. This is a practical shared 2D rendering path for text-heavy diagrams, instruments and plots. Hardware acceleration is host-dependent; a browser without an appropriate graphics context can fall back to software. CI's headless Chromium may use SwiftShader. A successful headless test is therefore not a hardware-GPU performance measurement.
+## Editing and debugging session
 
-Uno SDK 6.7.30 and Uno WinUI 6.7.135 are the stable packages verified on September 28, 2026. The compatible SkiaSharp 3.119.4 managed/native line is used rather than forcing the newer standalone SkiaSharp 4.x ABI into Uno. LabSpace does not currently implement a custom WebGPU compute engine, Metal renderer, or Vulkan renderer. The dataflow and signal kernels execute in managed C#, not on the GPU.
+`InstrumentSession` is the UI-independent command boundary. An ordinary edit validates a before/after snapshot, rolls back on error, and records one undo unit. History is limited to 64 snapshots and 32 MiB per direction. Pointer gestures use one before snapshot and preview geometry until release; cancellation restores it. Geometry-only edits do not recompile the graph.
 
-## Execution and state
+`ConfigureStructure` applies a new immutable contract transactionally. It migrates legacy numeric connectors, synchronizes typed body nodes, and removes wires attached to deleted terminals. The staged UI editor does not modify model objects before Apply. Cancel is therefore not an edit. Undo restores removed wires and metadata together.
 
-The host timer targets 40 ms between continuous execution requests. This is a UI-friendly simulator schedule, not hard real time. The runtime's logical time advances per completed frame and is separate from wall-clock performance measurements. Elapsed execution milliseconds come from `Stopwatch` and exclude paused time between top-level steps. Layout, rendering, GC, browser compilation and timer scheduling are not included in this engine-only measurement.
+The session exposes named-output probes and the active nested frame. Breakpoints compare the next node and invocation path before execution. F10 steps over, F11 steps into; editing navigation remains independent of execution navigation. VI/body navigation, Undo/Redo, project replacement and code-affecting edits reset execution state.
 
-The initial structures are intentionally a numeric subset: there are no arbitrary typed tunnels, LabVIEW shift-register semantics, auto-indexing arrays, sequence locals, event structures, queues or reentrant call instances. Embedded SubVI bodies are reusable source objects, not linked external NI VI dependencies. See [compatibility](compatibility.md) for the complete boundary.
+The workbench's target timer interval is 40 ms. Pump yields after 4,096 transitions or roughly 8 ms checked after the first 16 transitions. Highlight yields after each transition. An individual primitive still runs to completion: this is cooperative responsiveness, not preemption or hard real time. File dialogs pause execution pumping while open. Recovery writes are serialized and throttled separately.
 
-## Persistence
+## Rendering
 
-Browser recovery uses an IndexedDB transaction; explicit save uses a downloadable JSON Blob. Browser import reads a user-selected local file and does not evaluate scripts. Desktop recovery uses a temporary file followed by an atomic replacement in the user's application-data folder. Desktop import/export uses Uno file-picker APIs; exact native picker behavior depends on the OS host and installed desktop services.
+Both editor surfaces use Uno's `SKCanvasElement`, contributing Skia drawing commands to the host compositor. Input and drawing use device-independent units with one shared pan/zoom transform. Zoom preserves the world coordinate under the pointer; wheel, middle-button pan and Fit use that transform.
 
-Recovery is periodically written after edits; explicit saves remain necessary for separate, portable backups. A successful download initiation cannot prove the browser user retained the downloaded file. Browser site-data clearing removes recovery.
+`DiagramRenderer` caches wire paths by endpoint/port/geometry signature. Drawing and hit-testing use the same geometry. Only visible nodes, wires and grid work are rasterized. Scalar wires use a thinner stroke than arrays/waveforms. Compact terminals, control labels on the left, indicator labels on the right, named structure outputs and triangular register markers improve the classic diagram appearance.
 
-## Safety bounds
+Structure previews are actual body diagrams recorded into `SKPicture`, not placeholder graphics. Preview capture is bounded to 256 nodes/1,024 wires and cached by document revision and diagram identity. Continuous playback does not rebuild unchanged previews. A nested structure inside a preview is represented by its glyph, not an unbounded recursive rendering.
 
-| Resource | Limit |
+The panel renderer reuses paint/typeface resources, culls offscreen items, bounds chart history, and uses extrema-preserving waveform decimation. This retains narrow peaks rather than selecting every Nth sample. Rendering still scans models for some signatures/selection operations; it is not claimed to be a million-node editor or fully incremental spatial index.
+
+Skia acceleration/fallback depends on the Uno host. Dataflow/DSP are managed CPU kernels, not WebGPU compute. Headless browser SwiftShader validation is not a physical-GPU benchmark. A Skia 4.x managed-only upgrade is unsafe with the pinned Uno native assets; the resolved ABI audit requires matched SkiaSharp 3.119.4 packages.
+
+## Custom controls and platform services
+
+`FrontPanelSurface`, `DiagramSurface`, `CanvasViewport`, `LabButton`, `LabPane`, `FunctionPalette`, `PropertyInspector`, `QuickDropControl`, `StructureContractEditor` and `InstrumentWorkbench` are reusable Uno components. Quick Drop requests cursor placement rather than silently inserting immediately. The connector editor stages an immutable draft. Native text, ComboBox/CheckBox, picker and dialog primitives retain platform input behavior; they are not all independently reimplemented low-level controls.
+
+Canvas accessibility remains a separate parity boundary: richer per-node/control automation peers are needed. The keyboard shortcut fallback observes handled routed Ctrl+Space events so buttons cannot consume Quick Drop as ordinary Space activation. Ordinary text-field undo and clipboard behavior remain intact.
+
+## Documents and limits
+
+Source-generated JSON accepts format 1 or 2 and migrates loaded version-1 projects to version 2. Format 2 stores contracts, connector types and named outputs. Old LabSpace 0.1 cannot load these files. Import does not evaluate code or install plugins. Unsupported kinds/types are rejected rather than approximated.
+
+| Resource | Bound |
 | --- | --- |
-| Project JSON | 8 MiB UTF-8 |
-| Instruments | 64 |
-| Nodes per diagram | 4,096 |
-| Nodes per project including nested bodies | 16,384 |
-| Wires per diagram | 16,384 |
-| Nested diagram depth | 12 |
-| Samples per value | 65,536 |
-| For/While iterations | 10,000 |
-| Evaluated nodes per root frame | 100,000 |
-| History | 64 snapshots and 32 MiB per direction |
-| Chart history | 4,096 samples per chart |
+| Project JSON | 8 MiB |
+| VIs / project | 64 |
+| Nodes / diagram | 4,096 |
+| Wires / diagram | 16,384 |
+| Nodes / project | 16,384 |
+| Nested diagram levels | 12 |
+| Loop iterations | 10,000 |
+| Evaluated nodes / root frame | 100,000 |
+| Samples / array or waveform | 65,536 |
+| Input / output tunnels | 32 / 32 |
+| Registers / structure | 16 |
+| History depth / register | 16 |
+| Chart history samples | 4,096 |
+| Undo or redo snapshots | 64 and 32 MiB |
 
-These bounds reduce accidental resource exhaustion; they are not a formal sandbox proof. Physical equipment control and safety-critical operation are outside this release's scope.
+Browser recovery is per-origin IndexedDB. Native recovery is stored in application data. Unreadable recovery is preserved rather than automatically replaced by a fresh example. Recovery is not a durable substitute for explicitly saved files.
+
+## Validation
+
+Engine tests cover calculations, compilation, migration, transactions, named outputs, indexed/conditional collections, register histories, zero-iteration behavior, rollback and cooperative cancellation. Browser acceptance uses real keyboard/pointer events and reads opt-in state/hit-target snapshots. Tests do not use those snapshots to mutate the model.
+
+Three-OS desktop builds, browser acceptance and source-provenance checks gate Pages. The same interactions run against the deployed application. Release packaging audits all nine libraries and matching native Skia assets. `tools/LabSpace.Benchmarks` records engine/FFT timings and allocation counts with machine/runtime metadata; those measurements do not represent GPU draw time, UI frame time or other machines.
+
+Full G types, linked/reentrant VIs, driver systems, native compilation and FPGA/real-time execution remain distinct future implementations, not capabilities implied by these abstractions. See [compatibility](compatibility.md).

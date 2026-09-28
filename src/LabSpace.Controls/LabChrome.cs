@@ -21,7 +21,7 @@ public sealed class VectorIcon : SKCanvasElement, IDisposable
     public bool Active { get; set; }
     public VectorIcon(string icon, LabFonts fonts) { Icon = icon; _drawing = new(fonts); Width = 20; Height = 20; IsHitTestVisible = false; }
     protected override void RenderOverride(SKCanvas canvas, Size area) => IconPainter.Draw(canvas, Icon, new(0, 0, (float)area.Width, (float)area.Height), _drawing, Active);
-    public void Dispose() => _drawing.Dispose();
+    public new void Dispose() => _drawing.Dispose();
 }
 
 public class LabButton : Button

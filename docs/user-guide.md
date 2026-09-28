@@ -1,68 +1,80 @@
 # User guide
 
-## Start with the examples
+## Open a working project
 
-Open the [browser studio](https://wieslawsoltes.github.io/LabSpace/). The initial project contains three working virtual instruments: **Signal Analysis**, **Arithmetic**, and **Stateful Loop**. The startup VI executes once so its indicators contain real calculated results. All acquisition is simulated; no physical hardware is accessed.
+The default project contains **Signal Analysis.vi**, **Arithmetic.vi**, **Stateful Loop.vi**, and **Indexed Accumulator.vi**. Signal Analysis runs once at startup. Its acquired waveform, RMS value, alarm, spectrum and history come from the real diagram. The source is explicitly simulated; no hardware is connected.
 
-Use the project explorer or document tabs to switch VIs. **Front Panel** shows controls and indicators. **Block Diagram** shows the executable graph. **Split** shows both. Ctrl+E switches between the first two views.
+The project explorer and document tabs select VIs. **Front Panel** is the instrument interface; **Block Diagram** is its program. **Ctrl+E** switches editors and Split shows both. Wheel zooms around the pointer; middle-button dragging pans; Shift+wheel pans horizontally. Fit frames the current content.
 
-## Operate an instrument
+## Operate and design a front panel
 
-In Signal Analysis, drag the amplitude knob or click the frequency numeric field. Press **Run** to calculate a frame or **Run Continuously** to repeat. The filtered waveform, RMS voltage, limit alarm, spectrum and bounded chart history are connected to the actual diagram outputs. **Abort** stops repetition. **Pause** pauses and resumes the current session. Click a graph to place a sample cursor.
+Run uses current control values. In Signal Analysis, drag Amplitude or click Frequency to edit it, then Run again. Run Continuously updates on a target 40 ms timer; pause/abort remain available. Click a graph to position its value cursor. Simulated sampling time is not a hardware clock.
 
-A knob's drag sensitivity spans its configured range over approximately 180 DIP of combined horizontal/vertical movement. Numeric field spinners increment by one. Value dialogs accept invariant-culture decimal points. A control's minimum and maximum govern pointer operation; the engine separately validates function-specific constraints, such as the signal source's Nyquist limit.
+Toggle **Edit Front Panel** to arrange controls. Drag a control to move it and its lower-right corner to resize it. Properties edits labels, ranges, dimensions and widget style. One drag creates one undo unit. Canceling the gesture restores the original state.
 
-## Create and wire a VI
+**Ctrl+Space** opens Quick Drop for controls. Type a name, use Up/Down to choose, press Enter and click the canvas to place it. Escape cancels. Right-click also opens the context palette; palette tiles insert directly. New controls and corresponding diagram terminals are created together. Indicators require a matching input wire before the diagram can run.
 
-Choose **File → New VI**. In the front panel, click a control or indicator in the palette. Each added control has a corresponding block-diagram terminal. In the diagram, click a function from the Functions palette to insert it near the center of the viewport. Search filters the available functions.
+## Connect a program
 
-Wire by clicking an output terminal on the right of a node, then an input on the left of another node. Dragging directly between terminals also works. The square's color indicates its type: orange numeric, green Boolean, pink string, brown waveform. Outputs can feed multiple inputs. Connecting a new source to an already-wired input replaces its previous source in one undoable operation. Type mismatches and combinational cycles are rejected; use an explicit Feedback node for previous-frame state.
+Choose Block Diagram. Ctrl+Space searches functions and puts the chosen function on the cursor for placement. Click an output terminal, then an input, or drag between them. Structure outputs are individually named; choose the terminal for the value needed downstream. Connecting an occupied input replaces its source in one undoable edit. Outputs may fan out.
 
-Select a wire and press **Probe** to inspect its most recent value. Select a function and open **Properties** to edit its label, constants, source configuration, filter window or unwired optional-input defaults. Required unwired inputs appear in the error list and prevent execution.
+Numeric wires are orange, Boolean green, string pink and waveform brown. Numeric arrays use thicker orange/brown lines. Incompatible types are rejected. The compiler reports missing inputs, invalid named terminals and combinational cycles rather than silently producing default measurements. A Feedback node explicitly carries state across invocations.
 
-## Edit layout
+Click a node to select it, Ctrl+click to extend selection, or drag a marquee on blank canvas. Move selected nodes, nudge with arrow keys, duplicate, delete, copy/paste or undo. Geometry edits do not repeatedly compile the program. Clean Up arranges nodes by dependency rank; it is not full obstacle-aware NI wire routing.
 
-Drag node bodies to move them on the diagram's ten-unit grid. Ctrl-click adds or removes nodes from a selection. Drag a marquee in empty diagram space to select multiple nodes. Arrow keys nudge a focused diagram selection. **Clean Up Diagram** lays out nodes by dependency rank. The layout algorithm is intentionally simple; wires are orthogonally routed but not fully obstacle-avoiding.
+## Configure tunnels and registers
 
-On the front panel, toggle **Edit Front Panel** before moving controls. Drag the lower-right corner to resize. Properties exposes labels, numeric bounds, dimensions and compatible widget styles. Numeric nodes can use numeric fields, knobs, sliders and gauges; Boolean nodes can use switches or LEDs. Front-panel and diagram deletion are linked and undoable.
+Select a For, While, Case or SubVI and open **Tunnels and shift registers** from the toolbar or Properties. Declare input/output names and types, collection modes, explicit output defaults and register histories. Changes remain a draft until Apply. Cancel leaves the document untouched. Apply synchronizes connector nodes and records one undo transaction.
 
-Mouse wheel zooms around the pointer. Middle-button drag pans. Shift+wheel pans horizontally. **Fit to Window** frames all content. Large content is drawn within a clipped viewport; visible traces are decimated to pixel resolution.
+Removing or renaming a terminal removes its attached wires; Undo restores them. Changing a type may leave a wire invalid until you rewire it. Required outputs must be wired unless you explicitly permit an unwired default.
+
+Double-click a structure to edit its actual embedded body, shown in the cached thumbnail. Wire typed Connector Inputs to functions and Connector Outputs. **Parent Diagram** returns. TRUE/FALSE buttons choose the Case branch to edit; execution still follows its wired Boolean selector.
+
+Ordinary tunnels/registers support numbers, Booleans, Unicode strings, numeric arrays and waveforms. Numeric input auto-indexing gives each For iteration one array element; the shortest indexed array and explicit count bound execution. While indexing supplies zero after an array ends and does not terminate the loop. Outputs return their last value, collect numbers, concatenate numeric arrays, or include only iterations whose named Boolean condition is true.
+
+At zero For iterations, collections are empty, last-value tunnels return type defaults and registers return initial/prior values. Initialized registers reset for every invocation. Uninitialized registers retain successfully committed state at their invocation path until reset, code-affecting edits, Undo/Redo or VI/body navigation. Stacked histories expose `state`, `state:1`, `state:2`, and later entries.
+
+A While Loop requires one Loop Condition and runs at least once. Its condition can mean Stop when TRUE or Continue while TRUE. Conditional For loops combine that terminal with their count/indexing bound. The terminating iteration contributes outputs. Both loop types are bounded to 10,000 iterations and share the root node budget. Legacy numeric bodies remain supported and migrate when you apply their connector draft. See [typed structures](typed-structures.md) for exact rules.
+
+## Try the indexed accumulator
+
+Open **Indexed Accumulator.vi** and Run. Samples `1,2,3,4,5` produce final sum `15` and running sums `[1,3,6,10,15]`. Select its loop, open the connector editor, turn off Initialized and Apply. Run twice: the final values become `15` then `30`. Undo restores initialization and its external wire. Double-click the loop to edit the real addition and connectors.
 
 ## Debug execution
 
-**Run** executes a topological frame. **Highlight Execution** executes one top-level node per timer tick, making the sequence visible. **Single Step** executes the next top-level node without continuous progression. A nested structure is currently one step-over operation.
+A broken Run arrow opens the error list. Resolve errors before running. **F10** steps over the next top-level node; **F11** advances nested execution. The context-help pane shows the deepest active frame, its next node and recent values without changing which body you are editing. Starting/returning from a structure is a transition, so not every F11 evaluates another primitive.
 
-Select a node and set its breakpoint in Properties or the Operate menu. Execution stops before the node runs; Run resumes. Probes expose the last computed source value on selected wires. Errors include the responsible node when available. The error-list button shows structured compile diagnostics and lets you select the affected node.
+Set breakpoints in Properties or Operate. For a breakpoint inside a body, return to its caller before running it. Execution stops before that node; Run resumes. Highlight advances one activation transition per timer tick. Select a wire and attach a probe to inspect its named output. Abort discards the active frame. Pending feedback and uninitialized-register dictionaries commit only after successful root execution; this does not roll back arbitrary side effects or the random generator.
 
-Feedback outputs read state from the previous completed root frame. New feedback input values are committed only after the root frame completes successfully. Abort discards an incomplete frame. A structural edit resets execution and graph state; geometry and selection edits do not recompile the graph.
+Large nested graphs yield between transitions to keep input responsive. An individual kernel still runs to completion: scheduling is cooperative, not preemptive or hard real time. Step-over may complete an entire bounded structure before returning.
 
-## Nested structures
+## Save, recover and export
 
-Double-click a For Loop, While Loop, Case Structure or SubVI to enter its real nested body. **Parent Diagram** returns to the containing diagram. Connector Input nodes read `state`, `i` or `x` from the invocation. Exactly one numeric Connector Output returns a result. A While Loop additionally needs exactly one Boolean Loop Condition terminal.
+Save downloads **`.labspace.json`** with all VIs, diagrams, contracts and panel layouts. Version-1 files migrate to version 2 on load. Older LabSpace 0.1 cannot read version-2 files. NI `.vi`, `.ctl`, `.lvproj` and related formats are not parsed.
 
-For Loop carries the numeric state through an integer count of iterations. While Loop runs at least once and stops when its condition becomes true; exceeding 10,000 iterations reports an error. Case Structure executes only its selected branch; Properties opens its FALSE alternative. The supplied bodies illustrate numeric state flow and are editable with the same node tools. These are not full LabVIEW tunnel, auto-indexing or shift-register semantics.
+Browser recovery is periodic per-origin IndexedDB; native recovery uses application data. Invalid recovery is preserved instead of silently overwritten. Keep explicit saved files. Replacing a dirty project requires confirmation. Browser Open remains tied to the initiating user action so file pickers work.
 
-## Files
-
-**Save Project** downloads a `.labspace.json` file containing all VIs, diagrams and panel layouts. **Open Project** reads this format. It does not parse NI `.vi`, `.ctl` or `.lvproj` binary files. Unsupported versions, oversized files and malformed models are rejected rather than silently imported as partial documents.
-
-Browser recovery is stored in IndexedDB on the same origin. Desktop recovery is stored under the current user's application-data directory. Recovery is periodic, so keep explicit saves of important work. Export Waveform CSV writes the selected waveform or first available waveform result, using invariant numeric formatting. Imported projects are data; they cannot run JavaScript or install hardware drivers.
+Run and select a waveform/array before Export Waveform CSV. When no suitable selection is available, the first waveform result is used. FFT waveforms represent frequency on their horizontal axis. Imports never evaluate embedded script or install drivers.
 
 ## Keyboard reference
 
 | Shortcut | Action |
 | --- | --- |
-| Ctrl+E | Switch front panel / block diagram |
-| Ctrl+R | Run |
-| F6 | Run continuously |
-| F10 | Single top-level step |
-| Ctrl+S / Ctrl+O / Ctrl+N | Save / open / new VI |
+| Ctrl+E | Switch Front Panel / Block Diagram |
+| Ctrl+R / F6 | Run / run continuously |
+| F10 / F11 | Step over / step into |
+| Ctrl+Space | Quick Drop; Enter then click to place |
+| Ctrl+S / Ctrl+O / Ctrl+N | Save / open project / new VI |
 | Ctrl+Z / Ctrl+Y on canvas | Undo / redo |
-| Ctrl+C / Ctrl+V on canvas | Internal graph copy / paste |
-| Ctrl+D on canvas | Duplicate selected subgraph |
-| Ctrl+A on canvas | Select all nodes |
-| Delete on canvas | Delete selection |
-| Arrows on diagram | Nudge selection |
-| Escape on canvas | Cancel the current gesture |
+| Ctrl+C / Ctrl+V / Ctrl+D on canvas | Copy / paste / duplicate |
+| Ctrl+A / Delete on canvas | Select all / delete |
+| Arrow keys on diagram | Nudge by ten world units |
+| Escape | Cancel gesture, placement or Quick Drop |
 
-Some browser or OS shortcuts take precedence. Equivalent toolbar and menu commands remain available. Text fields retain native text editing services. Canvas copy/paste is internal to the session, not a general-purpose clipboard format.
+Some browser/OS shortcuts take precedence. Equivalent toolbar/menu actions remain available. Text fields retain their own text editing and clipboard behavior.
+
+## Signal and compatibility notes
+
+Simulated sources support sine, square and triangle waveforms with optional deterministic noise. Frequency must not exceed Nyquist. Moving Average is causal but block-local. RMS is scaled to avoid unnecessary overflow. FFT uses a periodic Hann window and coherent-gain-corrected one-sided amplitudes; its sample count must be a power of two.
+
+This is a usable independent subset, not complete NI binary, G-language, hardware, GPU-compute, FPGA or real-time compatibility. See the [compatibility ledger](compatibility.md) before adopting it for a workflow.

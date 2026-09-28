@@ -1,27 +1,39 @@
 # Compatibility ledger
 
-LabSpace targets the familiar LabVIEW workflow, but **0.1.0-alpha.1 is not complete or pixel-identical LabVIEW parity**. This ledger separates working implementation from unsupported capabilities. NI and LabVIEW are trademarks of their owners. This independent project includes no NI source, icons, driver binaries or runtime.
+LabSpace targets the classic LabVIEW workflow, but **0.2.0-alpha.1 is not complete or pixel-identical LabVIEW parity**. This ledger separates working implementation from unsupported capabilities. This independent project includes no NI source, icons, driver binaries or runtime.
 
 | Area | Implemented | Remaining boundary |
 | --- | --- | --- |
-| Workbench | Classic menus/toolbars, project tree, VI tabs, paired front panel/diagram, split view, context help, properties, error list | Every original dialog, palette, option, shortcut, floating OS window and exact visual layout |
-| Front panel | Numeric fields, knobs, sliders, gauges, switches, LEDs, strings, numeric arrays, waveform graphs/charts, cursor, move/resize | Full control family, custom-control editor, clusters, trees/tables, decorations, typedefs, event semantics and native accessibility peers for each item |
-| Diagram | Node insertion, selection/marquee, dragging, typed terminals, orthogonal wires, fan-out, probes, duplicate/copy/paste, simple clean-up | Full wire editing/branch junction UX, obstacle-aware routing, original icon editor, connector panes and full G editing semantics |
-| Types | Finite doubles, Boolean, UTF-16 strings, numeric arrays, waveforms with rate/start metadata | Integer widths/coercion dots, clusters, variants, enums, references, errors as typed clusters, complex numbers, multidimensional/general arrays |
-| Functions | Arithmetic, comparisons, Boolean, string, array, signal generation, gain/offset, block moving average, RMS, peak-to-peak, FFT and waveform extraction | NI's complete function/analysis library, expression/formula nodes, native DLL/.NET/Python nodes, comprehensive units and type coercion |
-| Structures | Editable numeric embedded For, While, Case and SubVI bodies, explicit frame feedback | Arbitrary typed tunnels, auto-indexing, LabVIEW shift registers, sequence locals, events, queues/channels, linked VI libraries, polymorphism and reentrancy |
-| Execution | Typed validation, cached topological plan, bounded deterministic managed execution, cancellation API, runtime node errors, continuous simulation | LabVIEW compiler/runtime compatibility, exact G scheduling, parallel execution, compilation to native code, hard real time, FPGA and GPU compute |
-| Debugger | Top-level step-over, highlight execution, breakpoints, wire probes, validation navigation | Nested step-into/out, conditional breakpoints, watch expressions, VI profiling and execution-trace equivalence |
-| Files | Versioned source-generated LabSpace JSON, strict model limits, complete native-format round trips, CSV waveform export, recovery | NI .vi/.ctl/.lvproj/.lvlib/.lvclass parsing, TDMS/LVM interchange, native VI bytecode or file-format compatibility |
-| Hardware | Explicit simulated sources | NI-DAQmx, VISA, SCPI hardware transport, serial/GPIB/USB drivers, hardware configuration, calibration and physical I/O |
-| Deployment | Shared Uno desktop and real browser hosts, reproducible build and Pages workflows | Signed installers, store packages, every supported browser/OS combination and physical-GPU performance certification |
+| Workbench | Classic menus/toolbars, project tree, VI tabs, paired editors, split view, help/properties/errors, broken Run arrow, keyboard Quick Drop and right-click palettes | Every original dialog, palette, option, shortcut, floating OS window and exact visual layout |
+| Front panel | Numeric fields, knobs, sliders, gauges, switches, LEDs, strings, numeric arrays, graphs/charts, cursor and move/resize | Full control family, custom-control editor, clusters, tables/trees, decorations, typedefs, event semantics and per-item accessibility peers |
+| Diagram | Insertion, selection/marquee, dragging, typed named terminals, orthogonal wires, fan-out, probes, copy/paste, cleanup and cached actual-body previews | Full branch/junction editing UX, obstacle-aware routing, original icon editor, NI connector-pane patterns and full G editing semantics |
+| Types | Finite doubles, Boolean, managed Unicode strings, numeric 1D arrays, waveforms with rate/start metadata | Integer widths/coercions, clusters, variants, enums, references, typed error clusters, complex numbers and general/multidimensional arrays |
+| Functions | Arithmetic/transcendentals, typed Select, Boolean logic, Unicode string transforms, numeric array transforms, waveform construction, signals, gain/offset, moving average, RMS, peak-to-peak and FFT | Complete NI function/analysis library, formula/expression nodes, DLL/.NET/Python nodes, units and full coercion rules |
+| Structures | For/While/Boolean Case/embedded SubVI; typed ordinary tunnels; numeric auto-indexing; conditional collection; array concatenation; initialized/uninitialized stacked registers; unwired defaults; conditional For; feedback | General indexed arrays, full NI tunnel/default/coercion rules, other Case selector types, sequence/event structures, queues/channels, linked VI libraries, polymorphism and reentrancy |
+| Execution | Typed validation, cached plan, bounded managed execution, cancellation including empty bodies, cooperative nested activations, staged feedback/register state and continuous simulation | NI compiler/runtime compatibility, exact G scheduling, parallel execution, native compilation, hard real time, FPGA and GPU compute |
+| Debugger | Step-over, nested step-into, active-frame values, highlight, nested breakpoints and named-output probes | Step-out, conditional breakpoints, watch expressions, VI profiling and full trace equivalence |
+| Files | Version-2 source-generated LabSpace JSON, version-1 migration, model limits, native-format round trips, CSV and recovery | NI .vi/.ctl/.lvproj/.lvlib/.lvclass parsing, TDMS/LVM and NI bytecode compatibility |
+| Hardware | Explicit simulated sources | NI-DAQmx, VISA, SCPI transport, serial/GPIB/USB drivers, configuration, calibration and physical I/O |
+| Deployment | Shared Uno desktop/browser hosts, build and Pages workflows | Signed installers, store packages, all browser/OS combinations and physical-GPU certification |
+
+## Structure semantics
+
+Non-indexed tunnels and registers support the five listed kinds. Indexing and conditional indexing collect numeric scalar elements; concatenation collects numeric arrays. This does not imply general LabVIEW array/type compatibility.
+
+For loops take the minimum of an explicit nonnegative integral count and indexed input lengths. Zero iterations return initial/prior register state, empty collections and type defaults for last-value tunnels. While loops execute at least once; indexed input beyond an array supplies zero. Output collection includes the final stopping iteration. Conditions can mean stop-when-true or continue-while-true.
+
+Uninitialized histories persist within one runtime and invocation path. Reset, code-affecting edits, Undo/Redo and VI/body navigation reset execution state. Pending register/feedback dictionaries commit only when the root frame succeeds. Random-generator advancement is not transactionally rolled back. Individual kernels are non-preemptive even though nested execution yields cooperatively.
+
+SubVIs remain embedded diagrams, not linked NI VIs. [Typed structures](typed-structures.md) documents the API, migration, limits and exact collection behavior.
 
 ## Reference behavior
 
-The implementation uses public NI documentation for workflow reference, including [LabVIEW Block Diagram Explained](https://www.ni.com/en/shop/labview/labview-block-diagram-explained.html) and the [LabVIEW product overview](https://www.ni.com/en/shop/labview.html). Source and graphics were independently implemented. Compatibility is assessed against documented behavior, not against proprietary implementation details.
+The current reference release is **LabVIEW 2026 Q3**, documented in [LabVIEW changes](https://www.ni.com/docs/en-US/bundle/labview/page/labview-changes.html). Its Unicode-related changes and default terminal label positions inform the implementation. LabSpace uses left-middle control labels and right-middle indicator labels, but does not implement complete 2026 Q3 byte-string/Unicode/PCRE2 semantics.
 
-The selected workflow is the classic desktop front-panel/block-diagram environment. No claim is made that the current visual theme matches every NI version, platform, theme or scale factor.
+Quick Drop follows NI's documented [search and cursor-placement workflow](https://www.ni.com/en/support/documentation/supplemental/08/boost-labview-productivity-with-quick-drop.html); its full shortcut/plugin system is not implemented. Other public references include [Block Diagram Explained](https://www.ni.com/en/shop/labview/labview-block-diagram-explained.html) and the [LabVIEW overview](https://www.ni.com/en/shop/labview.html). Source and graphics are independently implemented. No claim is made that the current visual theme matches every version, platform, theme or scale factor.
 
-## Adoption guidance
+## Adoption and verification
 
-Use this release for experimentation, education, graphical-programming prototypes and development of the reusable components. Do not treat simulated values as acquired measurements or deploy the current runtime for safety-critical or hard-real-time equipment control. Hardware integrations require separate design, security review and validation before use.
+Use this release for experimentation, education, graphical-programming prototypes and reusable-component development. Do not treat simulated values as acquired measurements or deploy this runtime for safety-critical/hard-real-time control. Hardware integrations require separate design and validation.
+
+Engine tests and real-pointer browser acceptance are automated. Three-OS desktop builds do not establish complete native-interaction compatibility. Headless browser rendering, including software GPU emulation, is not physical-GPU performance certification. Package artifacts do not imply NuGet-feed publication.

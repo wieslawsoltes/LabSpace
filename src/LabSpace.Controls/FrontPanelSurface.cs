@@ -9,6 +9,11 @@ public sealed class FrontPanelSurface : CanvasViewport
 {
     public PanelRenderer Renderer { get; }
     private PanelItem? _item;
+    private string? _placementKind, _placementWidget;
+    private PointD _pointer;
+    public string? PlacementKind => _placementKind;
+    public event Action<Point>? PaletteRequested;
+    public void ArmPlacement(string kind, string? widget) { Cancel(); _placementKind = kind; _placementWidget = widget; Focus(FocusState.Programmatic); Invalidate(); }
     private PointD _start;
     private RectD _bounds;
     private double _value;
@@ -25,7 +30,15 @@ public sealed class FrontPanelSurface : CanvasViewport
     private void Pressed(object sender, PointerRoutedEventArgs e)
     {
         Focus(FocusState.Pointer); if (BeginPan(e)) return;
-        var point = e.GetCurrentPoint(Canvas); if (!point.Properties.IsLeftButtonPressed) return;
+        var point = e.GetCurrentPoint(Canvas);
+        if (point.Properties.IsRightButtonPressed) { PaletteRequested?.Invoke(point.Position); e.Handled = true; return; }
+        if (!point.Properties.IsLeftButtonPressed) return;
+        if (_placementKind is { } kind)
+        {
+            var position = ToWorld(point.Position); var widget = _placementWidget; _placementKind = null;
+            Safe(() => Session.Add(kind, 80 + Session.Diagram.Nodes.Count % 4 * 180, 80 + Session.Diagram.Nodes.Count / 4 * 100, widget, new(Math.Round(position.X / 10) * 10, Math.Round(position.Y / 10) * 10)));
+            Session.PanelEditMode = true; Invalidate(); e.Handled = true; return;
+        }
         _start = ToWorld(point.Position); _item = Hit(_start);
         if (_item is null) { Session.Select(null); return; }
         Session.Select(_item.NodeId); var node = Session.Instrument.Diagram.Nodes.First(n => n.Id == _item.NodeId); var def = NodeCatalog.Get(node.Kind); _bounds = _item.Bounds; _value = node.Value;
@@ -53,7 +66,10 @@ public sealed class FrontPanelSurface : CanvasViewport
     }
     private void Moved(object sender, PointerRoutedEventArgs e)
     {
-        if (MovePan(e) || _item is null) return;
+        if (MovePan(e)) return;
+        _pointer = ToWorld(e.GetCurrentPoint(Canvas).Position);
+        if (_placementKind is not null) { Invalidate(); return; }
+        if (_item is null) return;
         var p = ToWorld(e.GetCurrentPoint(Canvas).Position); var dx = p.X - _start.X; var dy = p.Y - _start.Y;
         if (_moving)
         {
@@ -74,11 +90,19 @@ public sealed class FrontPanelSurface : CanvasViewport
         _item = null; Canvas.ReleasePointerCaptures(); e.Handled = true;
     }
     private void Safe(Action action) { try { action(); } catch (Exception error) { Session.Message(error.Message); } }
-    public void Cancel() { _moving = false; _operating = false; _item = null; Panning = false; Session.CancelGesture(); Canvas.ReleasePointerCaptures(); Invalidate(); }
+    public void Cancel() { _placementKind = null; _placementWidget = null; _moving = false; _operating = false; _item = null; Panning = false; Session.CancelGesture(); Canvas.ReleasePointerCaptures(); Invalidate(); }
     protected override SKRect ContentBounds()
     {
         var items = Session.Instrument.Panel; return items.Count == 0 ? new(0, 0, 1000, 600) : new(0, 0, (float)items.Max(i => i.Bounds.Right) + 30, (float)items.Max(i => i.Bounds.Bottom) + 30);
     }
-    protected override void Paint(SKCanvas canvas, SKRect viewport) => Renderer.Draw(canvas, Session, viewport);
+    protected override void Paint(SKCanvas canvas, SKRect viewport)
+    {
+        Renderer.Draw(canvas, Session, viewport);
+        if (_placementKind is not null)
+        {
+            using var pen = new SKPaint { Color = SKColor.Parse("#3977B4"), Style = SKPaintStyle.Stroke, StrokeWidth = 1, IsAntialias = true };
+            canvas.DrawRect((float)_pointer.X, (float)_pointer.Y, _placementWidget is "Graph" or "Chart" ? 410 : 160, _placementWidget is "Graph" or "Chart" ? 240 : _placementWidget == "Knob" ? 175 : 95, pen);
+        }
+    }
     public override void Dispose() { base.Dispose(); Renderer.Dispose(); }
 }

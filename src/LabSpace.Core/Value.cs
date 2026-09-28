@@ -22,7 +22,11 @@ public sealed record Value
         return new() { Kind = ValueKind.Number, Number = value };
     }
     public static Value Bool(bool value) => new() { Kind = ValueKind.Boolean, Boolean = value };
-    public static Value String(string value) => new() { Kind = ValueKind.String, Text = value ?? "" };
+    public static Value String(string value)
+    {
+        if (value?.Length > 1000000) throw new ArgumentException("Strings are limited to one million UTF-16 code units.");
+        return new() { Kind = ValueKind.String, Text = value ?? "" };
+    }
     public static Value Vector(IEnumerable<double> values) => Series(values, 1, 0, false);
     public static Value Series(IEnumerable<double> values, double sampleRate, double startTime = 0, bool waveform = true)
     {

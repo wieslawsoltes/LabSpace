@@ -10,7 +10,18 @@ public static class IconPainter
         c.Save(); c.Translate(r.Left, r.Top); c.Scale(r.Width / 24, r.Height / 24); var ink = LabDrawing.Color("#424242");
         switch (name)
         {
+            case "quick-drop":
+                d.Circle(c, 10, 9, 6, SKColors.White); d.Circle(c, 10, 9, 6, ink, false);
+                d.Line(c, 14, 14, 21, 21, ink, 2); d.Line(c, 10, 5, 10, 13, ink); d.Line(c, 6, 9, 14, 9, ink);
+                break;
             case "run": using (var p = new SKPath()) { p.MoveTo(4, 5); p.LineTo(11, 5); p.LineTo(11, 2); p.LineTo(21, 12); p.LineTo(11, 22); p.LineTo(11, 18); p.LineTo(4, 18); p.Close(); d.Path(c, p, SKColors.White, fill: true); d.Path(c, p, ink, 1.4f); } break;
+            case "run-broken":
+                Draw(c, "run", new(0, 0, 24, 24), d);
+                d.Line(c, 4, 18, 20, 5, LabDrawing.Color("#EFEFEF"), 6);
+                d.Line(c, 5, 17, 9, 11, LabDrawing.Color("#AC332A"), 2);
+                d.Line(c, 9, 11, 14, 12, LabDrawing.Color("#AC332A"), 2);
+                d.Line(c, 14, 12, 19, 6, LabDrawing.Color("#AC332A"), 2);
+                break;
             case "continuous":
                 using (var p = new SKPath()) { p.AddArc(new(3, 4, 20, 21), 205, 265); d.Path(c, p, ink, 1.6f); } d.Line(c, 5, 4, 5, 10, ink, 1.6f); d.Line(c, 5, 4, 11, 5, ink, 1.6f); break;
             case "stop": using (var p = new SKPath()) { p.MoveTo(7, 3); p.LineTo(17, 3); p.LineTo(22, 8); p.LineTo(22, 17); p.LineTo(17, 22); p.LineTo(7, 22); p.LineTo(2, 17); p.LineTo(2, 8); p.Close(); d.Path(c, p, LabDrawing.Color("#BF423B"), fill: true); d.Path(c, p, ink); } break;

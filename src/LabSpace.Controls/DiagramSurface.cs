@@ -10,6 +10,10 @@ public sealed class DiagramSurface : CanvasViewport
 {
     public DiagramRenderer Renderer { get; }
     private string? _wiringFrom;
+    private string _wiringOutput = "result";
+    private Node? _placement;
+    public string? PlacementKind => _placement?.Kind;
+    public void ArmPlacement(string kind) { Cancel(); _placement = LabSpace.Documents.Examples.NewNode(kind, _pointer.X, _pointer.Y); Focus(FocusState.Programmatic); Invalidate(); }
     private PointD _start, _pointer;
     private bool _dragging, _marquee, _wireMoved;
     private readonly Dictionary<string, PointD> _original = [];
@@ -46,8 +50,9 @@ public sealed class DiagramSurface : CanvasViewport
         var p = new SKPoint((float)point.X, (float)point.Y); var tolerance = Math.Max(7, 8 / Zoom);
         foreach (var node in Session.Diagram.Nodes.AsEnumerable().Reverse())
         {
-            if (!NodeCatalog.TryGet(node.Kind, out var def)) continue;
-            if (def.HasOutput && SKPoint.Distance(DiagramGeometry.Output(node), p) <= tolerance) return (node, 0, true);
+            if (!NodeCatalog.TryGet(node.Kind, out _)) continue;
+            var def = NodeCatalog.Resolve(node);
+            for (var i = 0; i < def.Outputs.Length; i++) if (SKPoint.Distance(DiagramGeometry.Output(node, i), p) <= tolerance) return (node, i, true);
             for (var i = 0; i < def.Inputs.Length; i++) if (SKPoint.Distance(DiagramGeometry.Input(node, i), p) <= tolerance) return (node, i, false);
         }
         return null;
@@ -58,14 +63,19 @@ public sealed class DiagramSurface : CanvasViewport
         var point = e.GetCurrentPoint(Canvas); _pointer = _start = ToWorld(point.Position);
         if (point.Properties.IsRightButtonPressed) { PaletteRequested?.Invoke(point.Position); e.Handled = true; return; }
         if (!point.Properties.IsLeftButtonPressed) return;
+        if (_placement is { } placement)
+        {
+            _placement = null; Safe(() => Session.Add(placement.Kind, Math.Round(_pointer.X / 10) * 10, Math.Round(_pointer.Y / 10) * 10));
+            Invalidate(); e.Handled = true; return;
+        }
         var port = HitPort(_pointer);
         if (port.HasValue)
         {
-            if (port.Value.Output) { _wiringFrom = port.Value.Node.Id; _wireMoved = false; Session.Select(port.Value.Node.Id); Canvas.CapturePointer(e.Pointer); }
+            if (port.Value.Output) { _wiringFrom = port.Value.Node.Id; _wiringOutput = NodeCatalog.Resolve(port.Value.Node).Outputs[port.Value.Index].Name; _wireMoved = false; Session.Select(port.Value.Node.Id); Canvas.CapturePointer(e.Pointer); }
             else if (_wiringFrom is not null) { FinishWire(port.Value); }
             else
             {
-                var name = NodeCatalog.Get(port.Value.Node.Kind).Inputs[port.Value.Index].Name;
+                var name = NodeCatalog.Resolve(port.Value.Node).Inputs[port.Value.Index].Name;
                 Session.Message($"{port.Value.Node.Label} · {name}: click an output terminal first, then this input.");
             }
             Invalidate(); e.Handled = true; return;
@@ -91,6 +101,7 @@ public sealed class DiagramSurface : CanvasViewport
     {
         if (MovePan(e)) return;
         _pointer = ToWorld(e.GetCurrentPoint(Canvas).Position);
+        if (_placement is not null) { _placement.X = _pointer.X; _placement.Y = _pointer.Y; Invalidate(); return; }
         if (_wiringFrom is not null) { _wireMoved |= Math.Abs(_pointer.X - _start.X) + Math.Abs(_pointer.Y - _start.Y) > 5; Invalidate(); }
         if (_dragging)
         {
@@ -118,16 +129,20 @@ public sealed class DiagramSurface : CanvasViewport
     private void FinishWire((Node Node, int Index, bool Output) target)
     {
         var from = _wiringFrom; _wiringFrom = null;
-        if (from is not null) Safe(() => Session.Connect(from, target.Node.Id, NodeCatalog.Get(target.Node.Kind).Inputs[target.Index].Name));
+        if (from is not null) Safe(() => Session.Connect(from, target.Node.Id, NodeCatalog.Resolve(target.Node).Inputs[target.Index].Name, _wiringOutput));
     }
     private void Safe(Action action) { try { action(); } catch (Exception error) { Session.Message(error.Message); } }
-    public void Cancel() { _dragging = false; _marquee = false; _wiringFrom = null; Panning = false; Session.CancelGesture(); Canvas.ReleasePointerCaptures(); Invalidate(); }
+    public void Cancel() { _placement = null; _dragging = false; _marquee = false; _wiringFrom = null; Panning = false; Session.CancelGesture(); Canvas.ReleasePointerCaptures(); Invalidate(); }
     private SKRect MarqueeBounds() => new((float)Math.Min(_start.X, _pointer.X), (float)Math.Min(_start.Y, _pointer.Y), (float)Math.Max(_start.X, _pointer.X), (float)Math.Max(_start.Y, _pointer.Y));
     protected override SKRect ContentBounds()
     {
         var nodes = Session.Diagram.Nodes;
-        return nodes.Count == 0 ? new(0, 0, 850, 520) : new((float)nodes.Min(n => n.X) - 20, (float)nodes.Min(n => n.Y) - 30, nodes.Max(n => DiagramGeometry.Bounds(n).Right) + 50, nodes.Max(n => DiagramGeometry.Bounds(n).Bottom) + 45);
+        return nodes.Count == 0 ? new(0, 0, 850, 520) : new((float)nodes.Min(n => n.X) - 180, (float)nodes.Min(n => n.Y) - 30, nodes.Max(n => DiagramGeometry.Bounds(n).Right) + 200, nodes.Max(n => DiagramGeometry.Bounds(n).Bottom) + 45);
     }
-    protected override void Paint(SKCanvas canvas, SKRect viewport) => Renderer.Draw(canvas, Session, viewport, _wiringFrom, new((float)_pointer.X, (float)_pointer.Y), _marquee ? MarqueeBounds() : null);
+    protected override void Paint(SKCanvas canvas, SKRect viewport)
+    {
+        Renderer.Draw(canvas, Session, viewport, _wiringFrom, new((float)_pointer.X, (float)_pointer.Y), _marquee ? MarqueeBounds() : null, _wiringOutput);
+        if (_placement is not null) Renderer.DrawPlacement(canvas, _placement);
+    }
     public override void Dispose() { base.Dispose(); Renderer.Dispose(); }
 }

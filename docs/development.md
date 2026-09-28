@@ -1,8 +1,8 @@
 # Development and validation
 
-## Prerequisites
+## Toolchain
 
-Use .NET SDK 10.0.401, resolved by `global.json`, and Uno SDK 6.7.30. Install `wasm-tools` to build the browser target. Browser tests use Node 22 and the pinned Playwright test package. The desktop-only build avoids requiring a WebAssembly workload.
+Use the pinned .NET SDK 10.0.401 and Uno SDK 6.7.30 in `global.json`. Browser builds require `wasm-tools`; acceptance uses Node 22 and pinned Playwright. A desktop-only build avoids installing the browser workload.
 
 ```sh
 python3 scripts/fetch-assets.py
@@ -10,18 +10,20 @@ dotnet test tests/LabSpace.Tests -c Release
 dotnet build src/LabSpace.App -f net10.0-desktop -c Release -p:LabSpaceDesktopOnly=true
 ```
 
-The font-fetch script verifies immutable Git blob hashes and retrieves the OFL license alongside the font. Do not copy local system fonts into the project. Source code does not include NI assets.
+The asset script verifies immutable Git blob hashes and downloads the OFL license with its font. Do not copy system fonts or NI artwork into the repository. Managed/native Skia packages are pinned together at 3.119.4; do not upgrade one independently.
 
-## Browser
+## Browser build and acceptance
 
 ```sh
 dotnet workload install wasm-tools --skip-manifest-update
-dotnet publish src/LabSpace.App -f net10.0-browserwasm -c Release -o artifacts/publish -p:WasmShellWebAppBasePath=/LabSpace/
+dotnet publish src/LabSpace.App -f net10.0-browserwasm -c Release \
+  -o artifacts/publish -p:WasmShellWebAppBasePath=/LabSpace/
+python3 scripts/check-native-abi.py
 python3 scripts/collect-site.py artifacts/publish artifacts/site
 python3 scripts/serve-site.py --directory artifacts/site --port 4173
 ```
 
-Open `http://127.0.0.1:4173/LabSpace/`. The collector requires an actual `.wasm` distribution and writes build provenance. Serving an arbitrary HTML shell is not considered a successful application build.
+Open `http://127.0.0.1:4173/LabSpace/`. The collector selects the published WebAssembly distribution and records the commit plus versions derived from `Directory.Build.props`/`global.json`. It rejects overlapping source/destination directories and invalid commit metadata. An arbitrary HTML shell is not a successful application build.
 
 ```sh
 npm install --ignore-scripts
@@ -29,26 +31,26 @@ npx playwright install --with-deps chromium
 npm run test:browser
 ```
 
-`LABSPACE_URL` points the same acceptance suite at a deployed site. Tests opt into `?test=1`, which enables **read-only** state and hit-target diagnostics. They interact through real pointer/keyboard events and downloaded files, not direct mutation APIs. Normal mode does not publish these diagnostics. The opt-in flag is a debugging convenience, not an access-control boundary.
+Set `LABSPACE_URL` to run the same suite against a deployed site. Tests enable `?test=1` for **read-only** state and hit-target diagnostics. Normal mode does not publish them. Tests use real keyboard/pointer input and downloads, not private model-mutation functions. The flag is a debugging convenience, not an access-control boundary.
 
-## Engine tests
+Browser output includes screenshots, failure traces, the HTML report and machine-readable `artifacts/test-results/results.json`. Tests fail on page errors. Headless Chromium uses SwiftShader where necessary; this is not physical-GPU performance or pixel-identical NI certification.
 
-The test suite covers numeric and comparison kernels, type/driver/cycle checks, unwired errors, feedback, real example execution, nested loops/cases/subVIs, cancellation and shared execution budgets, stepping, JSON limits/round trips, array immutability, stable RMS, FFT amplitude/bin behavior, history, deletion, duplication, gesture transactions and breakpoint continuation.
+## Regression coverage
 
-Headless browser tests cover both views, actual node dragging with undo, terminal wiring, palette insertion, continuous execution, JSON download and recovery. Screenshots are produced for review. A headless render is not evidence of a physical GPU or pixel parity with NI LabVIEW.
+Engine tests cover calculations, compile/type/driver/cycle errors, feedback, examples, nested bodies, shared budgets, stepping, JSON limits/migration, immutable payloads, RMS/FFT, transactions, copy/paste and undo. Version 0.2 adds named outputs, typed contracts, indexed/conditional/concatenated collection, stacked register history, initialization/persistence, zero iterations, failure rollback and cancellation in empty bodies.
 
-## CI and release
+Browser workflows cover both editors, pointer wiring/dragging, undo, palette insertion, continuous run/abort, knob-driven results, JSON/recovery, nested body navigation, Quick Drop placement, named-output wiring, staged connector Apply/Cancel, persistent register results and step-into inspection. A dedicated focus regression opens Quick Drop after a toolbar button receives focus.
 
-`engine.yml` provides a lightweight engine gate. `build.yml` builds and tests the browser application and builds the shared desktop host on Windows, Linux and macOS. Pages deployment depends on successful browser and desktop jobs, validates the artifact's commit, and runs acceptance against the live URL. Source snapshots and validation artifacts are retained by GitHub Actions.
+## Continuous integration and packaging
 
-`release.yml` runs for `v*` tags or a manual build. It validates the engines, packs the nine reusable libraries and publishes the browser distribution as artifacts. A tagged run attaches these to a GitHub release. Packages are not automatically pushed to NuGet; successful packing is not a package-publication claim.
+`engine.yml` is the lightweight engine gate. `build.yml` builds/tests the real browser application and builds the shared native host on Windows, Linux and macOS. Pages depends on successful browser and desktop jobs, checks the artifact's commit and runs the same browser acceptance against the public URL. Source snapshots and validation artifacts are retained in Actions.
 
-## Performance
+`release.yml` runs on matching main-branch package/toolchain changes, `v*` tags, or manual dispatch. It tests the engines, packs all nine libraries/symbols, audits resolved Skia versions, publishes a browser distribution and records benchmarks. Tagged runs attach assets to a GitHub prerelease. Successful packing is not NuGet-feed publication; the workflow does not automatically push packages there.
 
-Selection/geometry edits must not compile the graph. Inspectors refresh on document or selection changes, not every signal frame. Wire geometry and font objects are reused, chart history is bounded, and waveform paths are limited to the current pixel budget. Engine milliseconds exclude rendering, UI layout, paused time and browser startup.
+## Performance and extension rules
 
-Run `dotnet run --project tools/LabSpace.Benchmarks -c Release` for a small reproducible engine/DSP baseline. Compare results on the same runtime and machine. The benchmark reports managed allocations and execution wall time; it does not measure physical GPU throughput or promise a frame rate.
+Selection and geometry changes must not repeatedly compile the graph. Inspectors refresh on document/selection changes rather than every signal frame. Wire paths, typefaces and actual-body previews are cached; history and collections are bounded. Cooperative nested work yields to the UI while individual kernels remain non-preemptive.
 
-## Extending the system
+Run `dotnet run --project tools/LabSpace.Benchmarks -c Release` for managed engine/FFT timing and allocation measurements. Compare on the same machine/runtime; the results do not measure GPU or UI frame time.
 
-Add value/model concepts in Core, signal kernels in Signals, catalog definitions and execution dispatch in Dataflow, serialization changes in Documents, commands in Editing, drawing in Skia and interaction in Controls. Bump the document format for breaking schema changes. Add tests for invalid inputs, round trips, cancellation and undo together with each new feature. Keep platform services behind `IProjectStorage` or new explicit injected contracts rather than introducing browser globals into the engine.
+Put models/types and catalog definitions in Core, DSP in Signals, validation/execution in Dataflow, serialization in Documents, transactions in Editing, rendering in Skia, input/components in Controls and composition in Workbench. Use immutable contracts with `NodeCatalog.Resolve(node)` for instance-specific ports. Bump the native document format for breaking schema changes and add invalid-input, round-trip, cancellation and undo tests. Keep platform services behind injected interfaces such as `IProjectStorage` rather than browser globals inside engines.
