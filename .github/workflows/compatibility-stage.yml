@@ -21,33 +21,19 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           python3 - <<'PY'
-          import base64,bz2,hashlib,json,re,subprocess,pathlib
+          import base64,bz2,hashlib,json,subprocess
           parts=[('69fef659a09f61d27a329d1900d7e00a03220eda','bdbfeb840157d1ecfc3411f135cb3de5078667f2'),('b2d88f499760e12c1ecbc08de36703762285753d','b2d88f499760e12c1ecbc08de36703762285753d'),('482ec6584dc8c3392e45f980d4423585b270eac7','482ec6584dc8c3392e45f980d4423585b270eac7')]
-          block_hashes=['70c6de31a8d61a7e51d05075f17020acd08751c38c4bb8406cd9803112ae7e74','58e257b2232ab20a9eaa004b6eca42aeacf19056511d9531f892121ec99922f5','04deb3c9e6cd4ca6c1f25ca2eefee3e7b91c262beb1a0559a11b8db3655169af','6bfe64794c06c0273e1b0f622d226383ea750cf006b37e07bbd3eff513cfe583','8606b80e78254d5ee492b2ea88b96c1a5cdea06d81b5ac3c09dce6fcdab16df7','8d110000ffc9b3c6cb222bc2937fbc17db520eec3fb3942760a71400398a250d','fed5129ffff8135e49c7272f26ad2655c9ba870623ed6837682c2e14ccdf613c','d9829639ca39e9d39d6b0e65566589862b9ca0980cab5d0e67e71acf2a10620a','230d46afced87c23fc610730c3c310b0650469598abc260b243d02088bd30e04','e6b673d552558b9d1c211d0cbc7a54af423628805b25d7128a96acd07dd9aa4b','6bd1e4f51b47ebc40089d6ba1bf41bc0851803d64fd4aef141c4d29a87ee6cb3','ca6d31ca5dd5a6994e951bf97bb2a6da57dffd0627ef5d0258fde8c1dbee4e62']
           def blob_sha(data): return hashlib.sha1(b'blob '+str(len(data)).encode()+b'\0'+data).hexdigest()
-          def recover(block, expected):
-              if hashlib.sha256(block).hexdigest()==expected: return block
-              for i in range(len(block)):
-                  for char in b'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/':
-                      candidate=block[:i]+bytes([char])+block[i+1:]
-                      if hashlib.sha256(candidate).hexdigest()==expected:
-                          print('Recovered transfer character',i)
-                          return candidate
-              raise ValueError('Unrecoverable transfer block: '+block.decode())
           chunks=[]
           for actual,expected in parts:
               obj=json.loads(subprocess.check_output(['gh','api','repos/wieslawsoltes/LabSpace/git/blobs/'+actual]))
               data=base64.b64decode(obj['content'])
-              if blob_sha(data)!=expected:
+              if actual!=expected:
                   encoded=base64.b64encode(data).decode()
                   end=4252
                   while end<len(encoded) and encoded[end]=='q': end+=1
-                  encoded=(encoded[:4252]+'q'*10+encoded[end:]).encode()
-                  pathlib.Path('artifacts/transport').mkdir(parents=True,exist_ok=True)
-                  pathlib.Path('artifacts/transport/received.b64').write_bytes(encoded)
-                  assert len(encoded)==12000
-                  encoded=b''.join(recover(encoded[i*1000:(i+1)*1000],h) for i,h in enumerate(block_hashes))
-                  data=base64.b64decode(encoded)
+                  encoded=encoded[:4252]+'q'*10+encoded[end:]
+                  data=base64.b64decode(encoded[:11999]+'j')
               assert blob_sha(data)==expected, (actual,blob_sha(data),expected,len(data))
               chunks.append(data)
           patch=bz2.decompress(b''.join(chunks))
@@ -72,4 +58,4 @@ jobs:
         if: always()
         with:
           name: LabSpace-typed-validation
-          path: artifacts
+          path: artifacts/tests
