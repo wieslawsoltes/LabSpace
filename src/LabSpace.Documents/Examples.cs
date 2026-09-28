@@ -2,9 +2,9 @@ using LabSpace.Core;
 
 namespace LabSpace.Documents;
 
-public static class Examples
+public static partial class Examples
 {
-    public static LabProject Create() => new() { Name = "Signal analysis.lvproj", Instruments = [SignalAnalysis(), Arithmetic(), Loop()] };
+    public static LabProject Create() => new() { Name = "Signal analysis.lvproj", Instruments = [SignalAnalysis(), Arithmetic(), Loop(), IndexedLoop(), TypedData()] };
     public static VirtualInstrument Blank(string name = "Untitled.vi") => new() { Name = name, Description = "Add controls and functions, wire compatible terminals, then Run." };
     public static Node NewNode(string kind, double x, double y)
     {
@@ -13,6 +13,9 @@ public static class Examples
         if (kind == "filter") n.Parameters["window"] = 8;
         if (kind == "array") n.Text = "1, 2, 3, 4, 5";
         if (kind == "input") n.Text = "state";
+        if (AdvancedNodes.IsTypedStructure(kind)) { ConfigureTypedStructure(n); return n; }
+        if (kind is "typed-constant" or "typed-control" or "typed-indicator") { n.Type = LabType.Int32; n.Text = "0"; }
+        if (kind == "array-reshape") n.Text = "[2,3]";
         if (d.IsStructure) { n.Body = StructureBody(kind == "while"); if (kind == "case") n.Alternative = StructureBody(false, 2); }
         return n;
     }

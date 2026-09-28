@@ -78,7 +78,7 @@ test('project download is versioned JSON and local recovery survives reload', as
   await boot(page); const entry = (await state(page)).palette['bool-control:Switch']; await page.mouse.click(entry.x + entry.width / 2, entry.y + entry.height / 2);
   await expect.poll(async () => (await state(page)).nodes.length).toBe(14);
   const downloadPromise = page.waitForEvent('download'); await clickCommand(page, 'save'); const download = await downloadPromise;
-  const file = await download.path(); const project = JSON.parse(await readFile(file, 'utf8')); expect(project.formatVersion).toBe(1); expect(project.instruments[0].diagram.nodes).toHaveLength(14);
+  const file = await download.path(); const project = JSON.parse(await readFile(file, 'utf8')); expect(project.formatVersion).toBe(2); expect(project.instruments[0].diagram.nodes).toHaveLength(14);
   await page.waitForTimeout(1200); await page.reload(); await page.waitForFunction(() => globalThis.labSpaceDiagnostics?.ready);
   await expect.poll(async () => (await state(page)).nodes.length).toBe(14);
 });

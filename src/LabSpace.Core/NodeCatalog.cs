@@ -1,11 +1,17 @@
 namespace LabSpace.Core;
 
-public sealed record PortDefinition(string Name, ValueKind Kind, bool Required = true, double Default = 0);
-public sealed record NodeDefinition(string Kind, string Title, string Category, string Glyph, string Description, PortDefinition[] Inputs, ValueKind Output, bool HasOutput = true)
+public sealed record PortDefinition(string Name, ValueKind Kind, bool Required = true, double Default = 0, LabType? WireType = null)
 {
-    public bool IsControl => Kind is "control" or "bool-control" or "string-control";
-    public bool IsIndicator => Kind is "indicator" or "bool-indicator" or "string-indicator" or "graph" or "chart" or "array-indicator";
-    public bool IsStructure => Kind is "for" or "while" or "case" or "subvi";
+    public LabType DataType => WireType ?? LabType.Scalar(Kind);
+}
+public sealed record NodeDefinition(string Kind, string Title, string Category, string Glyph, string Description, PortDefinition[] Inputs, ValueKind Output, bool HasOutput = true, LabType? WireType = null, PortDefinition[]? NamedOutputs = null)
+{
+    public LabType DataType => WireType ?? LabType.Scalar(Output);
+    public PortDefinition[] OutputPorts => NamedOutputs ?? (HasOutput ? [new("value", Output, WireType: WireType)] : []);
+    public PortDefinition? FindOutput(string name) => name == "value" ? OutputPorts.FirstOrDefault() : OutputPorts.FirstOrDefault(p => p.Name == name);
+    public bool IsControl => Kind is "control" or "bool-control" or "string-control" or "typed-control";
+    public bool IsIndicator => Kind is "indicator" or "bool-indicator" or "string-indicator" or "graph" or "chart" or "array-indicator" or "typed-indicator";
+    public bool IsStructure => Kind is "for" or "while" or "case" or "subvi" or "for-loop" or "while-loop" or "case-typed" or "subvi-typed";
 }
 
 public static class NodeCatalog
@@ -15,9 +21,10 @@ public static class NodeCatalog
     private static PortDefinition S(string name) => new(name, ValueKind.String);
     private static PortDefinition A(string name) => new(name, ValueKind.Array);
     private static PortDefinition W(string name) => new(name, ValueKind.Waveform);
-    public static readonly IReadOnlyList<NodeDefinition> All = Create();
+    public static readonly IReadOnlyList<NodeDefinition> All = Create().Concat(AdvancedNodes.Definitions).ToArray();
     private static readonly IReadOnlyDictionary<string, NodeDefinition> Map = All.ToDictionary(x => x.Kind);
     public static NodeDefinition Get(string kind) => Map.TryGetValue(kind, out var value) ? value : throw new ArgumentException($"Unknown function '{kind}'.");
+    public static NodeDefinition Describe(Node node) => AdvancedNodes.Describe(node, Get(node.Kind));
     public static bool TryGet(string kind, out NodeDefinition definition) => Map.TryGetValue(kind, out definition!);
     private static List<NodeDefinition> Create()
     {
