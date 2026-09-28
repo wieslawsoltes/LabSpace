@@ -1,0 +1,137 @@
+name: Build and deploy
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: studio-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  browser:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install toolchain and verified OFL assets
+        run: |
+          dotnet workload install wasm-tools --skip-manifest-update
+          python3 scripts/fetch-assets.py
+      - name: Test the executable engines
+        run: dotnet test tests/LabSpace.Tests -c Release --logger 'trx;LogFileName=engine.trx' --results-directory artifacts/tests
+      - name: Publish real Uno application
+        run: |
+          dotnet publish src/LabSpace.App -f net10.0-browserwasm -c Release -o artifacts/publish -p:WasmShellWebAppBasePath=/LabSpace/
+          python3 scripts/collect-site.py artifacts/publish artifacts/site
+      - name: Browser acceptance
+        run: |
+          npm install --ignore-scripts
+          npx playwright install --with-deps chromium
+          python3 scripts/serve-site.py --directory artifacts/site --port 4173 > artifacts/server.log 2>&1 &
+          npm run test:browser
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: LabSpace-browser
+          path: artifacts/site
+          include-hidden-files: true
+          if-no-files-found: ignore
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: LabSpace-validation
+          path: |
+            artifacts/tests
+            artifacts/screenshots
+            artifacts/test-results
+            artifacts/playwright-report
+            artifacts/server.log
+          if-no-files-found: ignore
+      - name: Preserve source snapshot
+        if: always()
+        run: git archive --format=zip --output=/tmp/LabSpace-source.zip HEAD
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: LabSpace-source
+          path: /tmp/LabSpace-source.zip
+  desktop:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+      - name: Build shared native host
+        run: |
+          python scripts/fetch-assets.py
+          dotnet build src/LabSpace.App -f net10.0-desktop -c Release -p:LabSpaceDesktopOnly=true
+  deploy:
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    needs: [browser, desktop]
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: LabSpace-browser
+          path: site
+      - name: Validate build provenance
+        env:
+          EXPECTED_SHA: ${{ github.sha }}
+        run: jq -e --arg sha "$EXPECTED_SHA" '.commit == $sha' site/build-info.json
+      - uses: actions/configure-pages@v5
+        with:
+          enablement: true
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+      - uses: actions/deploy-pages@v4
+        id: deployment
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Verify public deployment
+        env:
+          LABSPACE_URL: ${{ steps.deployment.outputs.page_url }}
+          EXPECTED_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          for attempt in $(seq 1 24); do
+            if curl --fail --silent "${LABSPACE_URL}build-info.json?commit=${EXPECTED_SHA}" -o /tmp/live-build.json && jq -e --arg sha "$EXPECTED_SHA" '.commit == $sha' /tmp/live-build.json; then break; fi
+            sleep 5
+          done
+          jq -e --arg sha "$EXPECTED_SHA" '.commit == $sha' /tmp/live-build.json
+          npm install --ignore-scripts
+          npx playwright install --with-deps chromium
+          npm run test:browser
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: LabSpace-public-validation
+          path: |
+            artifacts/screenshots
+            artifacts/test-results
+            artifacts/playwright-report
+          if-no-files-found: ignore

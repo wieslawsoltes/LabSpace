@@ -1,0 +1,15 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/LabSpace.Core/LabSpace.Core.csproj" />
+    <Project Path="src/LabSpace.Signals/LabSpace.Signals.csproj" />
+    <Project Path="src/LabSpace.Dataflow/LabSpace.Dataflow.csproj" />
+    <Project Path="src/LabSpace.Documents/LabSpace.Documents.csproj" />
+    <Project Path="src/LabSpace.Editing/LabSpace.Editing.csproj" />
+    <Project Path="src/LabSpace.Skia/LabSpace.Skia.csproj" />
+    <Project Path="src/LabSpace.Storage/LabSpace.Storage.csproj" />
+    <Project Path="src/LabSpace.Controls/LabSpace.Controls.csproj" />
+    <Project Path="src/LabSpace.Workbench/LabSpace.Workbench.csproj" />
+    <Project Path="src/LabSpace.App/LabSpace.App.csproj" />
+  </Folder>
+  <Folder Name="/tests/"><Project Path="tests/LabSpace.Tests/LabSpace.Tests.csproj" /></Folder>
+</Solution>
