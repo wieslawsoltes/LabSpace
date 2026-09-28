@@ -8,14 +8,25 @@ public static class DiagramGeometry
     public static SKRect Bounds(Node n)
     {
         if (!NodeCatalog.TryGet(n.Kind, out var d)) return new((float)n.X, (float)n.Y, (float)n.X + 100, (float)n.Y + 60);
-        var w = d.IsStructure ? 160 : n.Kind == "simulate" ? 112 : d.IsControl || d.IsIndicator || n.Kind.EndsWith("constant") || n.Kind == "constant" ? 92 : 76;
-        var h = d.IsStructure ? 102 : n.Kind == "simulate" ? 82 : d.IsControl || d.IsIndicator || n.Kind == "constant" ? 48 : 62;
+        d = NodeCatalog.Resolve(n);
+        var literal = n.Kind is "constant" or "bool" or "string";
+        var w = d.IsStructure ? 280 : n.Kind == "simulate" ? 118 : d.IsControl || d.IsIndicator ? 40 : literal ? 72 : 48;
+        var h = d.IsStructure ? Math.Max(190, 20 + Math.Max(d.Inputs.Length, d.Outputs.Length) * 24) : n.Kind == "simulate" ? 78 : literal ? 28 : d.IsControl || d.IsIndicator ? 32 : 48;
         return new((float)n.X, (float)n.Y, (float)n.X + w, (float)n.Y + h);
     }
-    public static SKPoint Output(Node n) { var b = Bounds(n); return new(b.Right, b.MidY); }
+    public static SKPoint Output(Node n, int index = 0)
+    {
+        var b = Bounds(n); var count = NodeCatalog.Resolve(n).Outputs.Length;
+        return new(b.Right, b.Top + b.Height * (index + 1) / (count + 1));
+    }
+    public static SKPoint Output(Node n, string name)
+    {
+        var d = NodeCatalog.Resolve(n); var output = d.FindOutput(name);
+        return Output(n, Math.Max(0, Array.FindIndex(d.Outputs, p => p.Name == output?.Name)));
+    }
     public static SKPoint Input(Node n, int index)
     {
-        var b = Bounds(n); var count = NodeCatalog.Get(n.Kind).Inputs.Length;
+        var b = Bounds(n); var count = NodeCatalog.Resolve(n).Inputs.Length;
         return new(b.Left, b.Top + b.Height * (index + 1) / (count + 1));
     }
     public static SKPoint[] Route(SKPoint from, SKPoint to)

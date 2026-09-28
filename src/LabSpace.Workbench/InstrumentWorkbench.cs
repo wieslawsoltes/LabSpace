@@ -11,7 +11,7 @@ namespace LabSpace.Workbench;
 public enum StudioView { FrontPanel, BlockDiagram, Split }
 
 /// <summary>The complete studio is a reusable Uno control. Hosts provide only storage and font assets.</summary>
-public sealed class InstrumentWorkbench : UserControl, IDisposable
+public sealed partial class InstrumentWorkbench : UserControl, IDisposable
 {
     private readonly IProjectStorage _storage;
     private readonly LabFonts _fonts;
@@ -55,7 +55,7 @@ public sealed class InstrumentWorkbench : UserControl, IDisposable
         FontFamily = LabTheme.Font; FontSize = 12; Background = LabTheme.Brush("#EFEFEF");
         FrontPanel = new(session, fonts); BlockDiagram = new(session, fonts); Inspector = new(session);
         FrontPanel.EditRequested += EditNode; BlockDiagram.EditRequested += EditNode;
-        BlockDiagram.HoverChanged += SetHelp; BlockDiagram.PaletteRequested += _ => { ShowProperties(false); Palette.FocusSearch(); };
+        BlockDiagram.HoverChanged += SetHelp;
         Palette.AddRequested += AddFromPalette;
         _front.PaneContent = FrontPanel; _diagram.PaneContent = BlockDiagram;
         _front.Commands.Children.Add(Command("fit-panel", "Fit panel", FrontPanel.Fit, "fit", false));
@@ -67,10 +67,10 @@ public sealed class InstrumentWorkbench : UserControl, IDisposable
         menuRow.Children.Add(BuildMenus()); _title.HorizontalAlignment = HorizontalAlignment.Right; _title.Margin = new(0, 0, 12, 0); _title.Foreground = LabTheme.Brush("#626262"); menuRow.Children.Add(_title); root.Children.Add(menuRow);
         var tools = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 1, Padding = new Thickness(5, 2, 5, 2), Background = LabTheme.Brush("#EFEFEF") };
         tools.Children.Add(Command("new", "New VI", Session.NewInstrument, "new")); tools.Children.Add(Command("open", "Open project", () => Forget(OpenAsync()), "open")); tools.Children.Add(Command("save", "Save project", () => Forget(SaveAsync()), "save")); tools.Children.Add(LabTheme.Separator());
-        tools.Children.Add(Command("run", "Run", () => Session.Run(), "run")); tools.Children.Add(Command("continuous", "Run continuously", () => Session.Run(true), "continuous")); tools.Children.Add(Command("abort", "Abort execution", Session.Abort, "stop")); tools.Children.Add(Command("pause", "Pause execution", Session.Pause, "pause")); tools.Children.Add(LabTheme.Separator());
+        tools.Children.Add(Command("run", "Run", RunOrShowErrors, "run")); tools.Children.Add(Command("continuous", "Run continuously", () => Session.Run(true), "continuous")); tools.Children.Add(Command("abort", "Abort execution", Session.Abort, "stop")); tools.Children.Add(Command("pause", "Pause execution", Session.Pause, "pause")); tools.Children.Add(LabTheme.Separator());
         tools.Children.Add(Command("highlight", "Highlight execution", () => { Session.Highlight = !Session.Highlight; Session.Notify(SessionChange.Execution); }, "highlight")); tools.Children.Add(Command("step", "Single step", Session.Step, "step")); tools.Children.Add(Command("probe", "Attach wire probe", () => { if (Session.SelectedWire is null) Session.Message("Select a wire, then attach a probe."); else Session.ToggleProbe(); }, "probe")); tools.Children.Add(LabTheme.Separator());
         tools.Children.Add(Command("undo", "Undo", Session.Undo, "undo")); tools.Children.Add(Command("redo", "Redo", Session.Redo, "redo")); tools.Children.Add(LabTheme.Separator());
-        tools.Children.Add(Command("edit-panel", "Edit front panel", () => { Session.PanelEditMode = !Session.PanelEditMode; Session.Notify(SessionChange.View | SessionChange.Execution); }, "edit"));
+        tools.Children.Add(Command("edit-panel", "Edit front panel", () => { Session.PanelEditMode = !Session.PanelEditMode; Session.PanelEditMode.ToString(); Session.Notify(SessionChange.View | SessionChange.Execution); }, "edit"));
         tools.Children.Add(Command("layout", "Clean up diagram", () => { Safe(Session.AutoLayout); SetView(StudioView.BlockDiagram); BlockDiagram.Fit(); }, "layout"));
         tools.Children.Add(Command("fit", "Fit to window", Fit, "fit")); tools.Children.Add(LabTheme.Separator());
         var fontCaption = LabTheme.Text("13 pt Application Font", 12); fontCaption.Margin = new(8, 0, 8, 0); tools.Children.Add(fontCaption);
@@ -97,7 +97,7 @@ public sealed class InstrumentWorkbench : UserControl, IDisposable
         _errorsHost.Child = new ScrollViewer { Content = _errors, MaxHeight = 155 }; _errorsHost.Background = LabTheme.Brush("#FFF9EF"); _errorsHost.Visibility = Visibility.Collapsed; Grid.SetRow(_errorsHost, 4); root.Children.Add(_errorsHost);
         var statusBar = new Grid { Background = LabTheme.Brush("#E5E5E5"), BorderBrush = LabTheme.Brush("#A5A5A5"), BorderThickness = new Thickness(0, 1, 0, 0) }; statusBar.ColumnDefinitions.Add(new() { Width = new(1, GridUnitType.Star) }); statusBar.ColumnDefinitions.Add(new() { Width = new(315) }); _status.Margin = new(8, 0, 8, 0); _metrics.Margin = new(8, 0, 8, 0); statusBar.Children.Add(_status); Grid.SetColumn(_metrics, 1); statusBar.Children.Add(_metrics); Grid.SetRow(statusBar, 5); root.Children.Add(statusBar);
         SizeChanged += (_, _) => { _middle.ColumnDefinitions[0].Width = ActualWidth < 1100 ? new(0) : new(185); _middle.ColumnDefinitions[2].Width = ActualWidth < 760 ? new(190) : new(245); _title.Visibility = ActualWidth < 900 ? Visibility.Collapsed : Visibility.Visible; };
-        AddAccelerators(); Session.Changed += OnChanged;
+        InitializeCompatibility(root, tools); AddAccelerators(); Session.Changed += OnChanged;
         _executionTimer.Tick += (_, _) => { if (!_dialogOpen) Session.Tick(); }; _executionTimer.Start();
         _recoveryTimer.Tick += (_, _) => Forget(SaveRecoveryAsync()); _recoveryTimer.Start();
         ShowProperties(false); RebuildProject(); ApplyView(); OnChanged(SessionChange.All); SetHelp(null);
@@ -128,7 +128,7 @@ public sealed class InstrumentWorkbench : UserControl, IDisposable
         Menu("Edit", ("Undo\tCtrl+Z", Session.Undo), ("Redo\tCtrl+Y", Session.Redo), ("Copy\tCtrl+C", Session.Copy), ("Paste\tCtrl+V", Session.Paste), ("Duplicate\tCtrl+D", () => { Session.Copy(); Session.Paste(); }), ("Delete selection", Session.Delete), ("Select all", Session.SelectAll));
         Menu("View", ("Front Panel", () => SetView(StudioView.FrontPanel)), ("Block Diagram\tCtrl+E", () => SetView(StudioView.BlockDiagram)), ("Split views", () => SetView(StudioView.Split)), ("Fit to window", Fit), ("100% zoom", () => { FrontPanel.SetZoom(1); BlockDiagram.SetZoom(1); }), ("Properties", () => ShowProperties(true)), ("Error list", ToggleErrors));
         Menu("Project", ("New virtual instrument", Session.NewInstrument), ("VI properties…", () => Forget(EditInstrumentAsync())), ("Parent diagram", () => Session.Leave()));
-        Menu("Operate", ("Run\tCtrl+R", () => Session.Run()), ("Run continuously\tF6", () => Session.Run(true)), ("Abort execution", Session.Abort), ("Pause / resume", Session.Pause), ("Single step\tF10", Session.Step), ("Set / remove breakpoint", Session.ToggleBreakpoint));
+        Menu("Operate", ("Run\tCtrl+R", RunOrShowErrors), ("Run continuously\tF6", () => Session.Run(true)), ("Abort execution", Session.Abort), ("Pause / resume", Session.Pause), ("Single step\tF10", Session.Step), ("Set / remove breakpoint", Session.ToggleBreakpoint));
         Menu("Tools", ("Clean up diagram", () => { Session.AutoLayout(); BlockDiagram.Fit(); }), ("Attach / remove wire probe", Session.ToggleProbe), ("Toggle panel editing", () => { Session.PanelEditMode = !Session.PanelEditMode; Session.Notify(); }), ("Validate diagram", () => { Session.Validate(); ToggleErrors(); }));
         Menu("Window", ("Front Panel / Block Diagram", ToggleView), ("Split horizontally", () => SetView(StudioView.Split)), ("Fit all content", Fit));
         Menu("Help", ("LabSpace user guide", () => Forget(ShowHelpAsync())), ("Compatibility and limits", () => Forget(ShowHelpAsync(true))));
@@ -141,7 +141,7 @@ public sealed class InstrumentWorkbench : UserControl, IDisposable
             var accelerator = new KeyboardAccelerator { Key = key, Modifiers = modifiers };
             accelerator.Invoked += (_, e) => { if (_dialogOpen) return; Safe(action); e.Handled = true; }; KeyboardAccelerators.Add(accelerator);
         }
-        Key(VirtualKey.E, VirtualKeyModifiers.Control, ToggleView); Key(VirtualKey.R, VirtualKeyModifiers.Control, () => Session.Run()); Key(VirtualKey.S, VirtualKeyModifiers.Control, () => Forget(SaveAsync())); Key(VirtualKey.O, VirtualKeyModifiers.Control, () => Forget(OpenAsync())); Key(VirtualKey.N, VirtualKeyModifiers.Control, Session.NewInstrument);
+        Key(VirtualKey.E, VirtualKeyModifiers.Control, ToggleView); Key(VirtualKey.R, VirtualKeyModifiers.Control, RunOrShowErrors); Key(VirtualKey.S, VirtualKeyModifiers.Control, () => Forget(SaveAsync())); Key(VirtualKey.O, VirtualKeyModifiers.Control, () => Forget(OpenAsync())); Key(VirtualKey.N, VirtualKeyModifiers.Control, Session.NewInstrument);
         Key(VirtualKey.F6, VirtualKeyModifiers.None, () => Session.Run(true)); Key(VirtualKey.F10, VirtualKeyModifiers.None, Session.Step);
         // Editing accelerators stay on canvas surfaces so text fields retain native undo and clipboard behavior.
         foreach (var canvas in new CanvasViewport[] { FrontPanel, BlockDiagram })
@@ -173,6 +173,7 @@ public sealed class InstrumentWorkbench : UserControl, IDisposable
     }
     private void OnChanged(SessionChange change)
     {
+        UpdateCompatibility();
         _status.Text = Session.Status.Replace('\n', ' '); _status.Foreground = LabTheme.Brush(Session.Diagnostics.Count > 0 ? "#AC3229" : "#363636");
         _metrics.Text = $"{Session.LastMilliseconds:F2} ms  |  {Session.LastNodeCount} nodes  |  frame {Session.Frames}  |  Skia";
         _title.Text = Session.Instrument.Name + (Session.Dirty ? " *" : "") + " — LabSpace";
@@ -210,7 +211,8 @@ public sealed class InstrumentWorkbench : UserControl, IDisposable
         var id = node?.Id; if (_hoverId == id && node is not null) return; _hoverId = id;
         if (node is null) { _help.Text = "LABSPACE\n\nFront Panel: operate or arrange controls.\nBlock Diagram: connect output terminals to matching inputs.\n\nCtrl+E switches views. Hover over a function for help."; return; }
         if (!NodeCatalog.TryGet(node.Kind, out var def)) { _help.Text = "Unknown function: " + node.Kind; return; }
-        _help.Text = def.Title.ToUpperInvariant() + "\n\n" + def.Description + "\n\n" + string.Join("\n", def.Inputs.Select(p => $"{p.Name}: {p.Kind}" + (p.Required ? " (required)" : " (optional)"))) + (def.HasOutput ? "\noutput: " + def.Output : "");
+        def = NodeCatalog.Resolve(node);
+        _help.Text = def.Title.ToUpperInvariant() + "\n\n" + def.Description + "\n\n" + string.Join("\n", def.Inputs.Select(p => $"{p.Name}: {p.Kind}" + (p.Required ? " (required)" : " (optional)"))) + "\n" + string.Join("\n", def.Outputs.Select(p => $"{p.Name}: {p.Kind} (output)"));
     }
     private void BuildErrors()
     {
@@ -227,9 +229,9 @@ public sealed class InstrumentWorkbench : UserControl, IDisposable
         if (_dialogOpen) return; _dialogOpen = true;
         try
         {
-            var kind = NodeCatalog.Get(node.Kind); var editable = kind.IsControl || node.Kind is "constant" or "bool" or "string" or "array" or "input";
+            var kind = NodeCatalog.Get(node.Kind); var editable = kind.IsControl || node.Kind is "constant" or "bool" or "string" or "array" or "input" or "output";
             if (!editable) { ShowProperties(true); return; }
-            var isText = node.Kind is "string" or "string-control" or "array" or "input";
+            var isText = node.Kind is "string" or "string-control" or "array" or "input" or "output";
             var box = new LabTextBox(isText ? node.Text : node.Value.ToString("G17", CultureInfo.InvariantCulture), node.Label) { MinWidth = 290 };
             var dialog = new ContentDialog { XamlRoot = XamlRoot, Title = node.Label, Content = box, PrimaryButtonText = "Apply", CloseButtonText = "Cancel", DefaultButton = ContentDialogButton.Primary };
             dialog.Opened += (_, _) => { box.Focus(FocusState.Programmatic); box.SelectAll(); };
@@ -302,7 +304,7 @@ public sealed class InstrumentWorkbench : UserControl, IDisposable
         if (element.Visibility != Visibility.Visible || element.ActualWidth <= 0 || element.ActualHeight <= 0) return new();
         try { var origin = element.TransformToVisual(this).TransformPoint(new(0, 0)); return new(origin.X, origin.Y, element.ActualWidth, element.ActualHeight); } catch { return new(); }
     }
-    public void Dispose()
+    public new void Dispose()
     {
         if (_disposed) return; _disposed = true; _executionTimer.Stop(); _recoveryTimer.Stop(); Session.Abort(); Session.Changed -= OnChanged; FrontPanel.Dispose(); BlockDiagram.Dispose(); Inspector.Dispose();
     }

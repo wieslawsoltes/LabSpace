@@ -10,6 +10,7 @@ public sealed record InputTunnel
     public string Name { get; init; } = "x";
     public ValueKind Type { get; init; }
     public bool Indexing { get; init; }
+    public bool Required { get; init; } = true;
 }
 
 public sealed record OutputTunnel

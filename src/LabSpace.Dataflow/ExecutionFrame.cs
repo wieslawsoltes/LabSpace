@@ -46,6 +46,7 @@ public sealed class ExecutionFrame
     public void StepInto()
     {
         if (Completed) return;
+        _budget.CheckCancellation();
         _watch.Start();
         try
         {

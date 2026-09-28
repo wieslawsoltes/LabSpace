@@ -12,7 +12,8 @@ public sealed class NodeExecutionException(string nodeId, string label, Exceptio
 public sealed class ExecutionBudget(int maximum, CancellationToken cancellation = default)
 {
     public int Evaluated { get; private set; }
-    public void Consume() { cancellation.ThrowIfCancellationRequested(); if (++Evaluated > maximum) throw new ExecutionLimitException("The execution budget was exceeded. Reduce loop counts or diagram size."); }
+    public void CheckCancellation() => cancellation.ThrowIfCancellationRequested();
+    public void Consume() { CheckCancellation(); if (++Evaluated > maximum) throw new ExecutionLimitException("The execution budget was exceeded. Reduce loop counts or diagram size."); }
 }
 public sealed class DataflowRuntime
 {

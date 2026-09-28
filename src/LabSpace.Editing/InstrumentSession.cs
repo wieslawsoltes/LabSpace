@@ -8,7 +8,7 @@ namespace LabSpace.Editing;
 public sealed record NavigationLevel(string NodeId, bool Alternative);
 
 /// <summary>UI-independent command and execution session. A caller-owned timer invokes Tick; no background thread touches the document.</summary>
-public sealed class InstrumentSession
+public sealed partial class InstrumentSession
 {
     private readonly List<string> _undo = [], _redo = [];
     private readonly List<NavigationLevel> _path = [];
@@ -39,6 +39,9 @@ public sealed class InstrumentSession
     public HashSet<string> Selection { get; } = [];
     public string? SelectedWire { get; private set; }
     public IReadOnlyDictionary<string, Value> Values { get; private set; } = new Dictionary<string, Value>();
+    public IReadOnlyDictionary<SourceTerminal, Value> OutputValues { get; private set; } = new Dictionary<SourceTerminal, Value>();
+    public ExecutionFrame? DebugFrame => _frame?.ActiveFrame;
+    public Value? OutputValue(string node, string output = "result") => OutputValues.TryGetValue(new(node, output), out var value) ? value : output == "result" ? Values.GetValueOrDefault(node) : null;
     public Dictionary<string, Queue<double>> ChartHistory { get; } = [];
     public IReadOnlyList<Diagnostic> Diagnostics { get; private set; } = [];
     public long Revision { get; private set; }
@@ -132,7 +135,7 @@ public sealed class InstrumentSession
         Push(_undo, before); _redo.Clear(); Touch(false);
     }
     public void CancelGesture() { if (_gesture is null) return; var before = _gesture; _gesture = null; Restore(before); Notify(SessionChange.All); }
-    public Node Add(string kind, double x, double y, string? widget = null)
+    public Node Add(string kind, double x, double y, string? widget = null, PointD? panelPosition = null)
     {
         Node? result = null;
         Edit(() =>
@@ -141,19 +144,19 @@ public sealed class InstrumentSession
             if (_path.Count == 0 && (def.IsControl || def.IsIndicator))
             {
                 var visual = widget ?? (kind is "graph" or "chart" ? "Graph" : def.Output == ValueKind.Boolean ? (def.IsControl ? "Switch" : "LED") : def.Output == ValueKind.String ? "String" : def.Output == ValueKind.Array ? "Array" : "Numeric");
-                Instrument.Panel.Add(new() { NodeId = result.Id, Widget = visual, Bounds = new(35 + Instrument.Panel.Count % 4 * 185, 70 + Instrument.Panel.Count / 4 * 155, visual is "Graph" or "Chart" ? 410 : 160, visual is "Graph" or "Chart" ? 240 : visual == "Knob" ? 175 : 95), Minimum = 0, Maximum = 100 });
+                Instrument.Panel.Add(new() { NodeId = result.Id, Widget = visual, Bounds = new(panelPosition?.X ?? 35 + Instrument.Panel.Count % 4 * 185, panelPosition?.Y ?? 70 + Instrument.Panel.Count / 4 * 155, visual is "Graph" or "Chart" ? 410 : 160, visual is "Graph" or "Chart" ? 240 : visual == "Knob" ? 175 : 95), Minimum = 0, Maximum = 100 });
             }
         }); Select(result!.Id); return result;
     }
-    public void Connect(string from, string to, string input)
+    public void Connect(string from, string to, string input, string output = "result")
     {
         var a = Find(from) ?? throw new ArgumentException("Source node is missing."); var b = Find(to) ?? throw new ArgumentException("Target node is missing.");
-        var source = NodeCatalog.Get(a.Kind); var port = NodeCatalog.Get(b.Kind).Inputs.FirstOrDefault(p => p.Name == input) ?? throw new ArgumentException("Input terminal is missing.");
-        if (!source.HasOutput || source.Output != port.Kind) throw new ArgumentException($"Wire type mismatch: {source.Output} → {port.Kind}.");
+        var source = NodeCatalog.Resolve(a).FindOutput(output) ?? throw new ArgumentException("Output terminal is missing."); var port = NodeCatalog.Resolve(b).Inputs.FirstOrDefault(p => p.Name == input) ?? throw new ArgumentException("Input terminal is missing.");
+        if (source.Kind != port.Kind) throw new ArgumentException($"Wire type mismatch: {source.Kind} → {port.Kind}.");
         Edit(() =>
         {
             Diagram.Wires.RemoveAll(w => w.To == to && w.Input == input);
-            Diagram.Wires.Add(new() { From = from, To = to, Input = input });
+            Diagram.Wires.Add(new() { From = from, To = to, Input = input, Output = output });
             var error = GraphCompiler.Validate(Diagram).FirstOrDefault(e => e.Code is "CYCLE" or "TYPE" or "DRIVER");
             if (error is not null) throw new ArgumentException(error.Message);
         }); Message("Wire connected");
@@ -169,7 +172,7 @@ public sealed class InstrumentSession
         });
     }
     public void SetValue(string id, double value) { if (!double.IsFinite(value)) throw new ArgumentException("Enter a finite number."); Edit(() => { var n = Find(id); if (n is not null) n.Value = value; }, false); }
-    public void SetText(string id, string text) => Edit(() => { var n = Find(id); if (n is not null) n.Text = text; }, false);
+    public void SetText(string id, string text) => Edit(() => { var n = Find(id); if (n is not null) n.Text = text; }, Find(id)?.Kind is "input" or "output");
     public void ToggleProbe() { var w = Diagram.Wires.FirstOrDefault(w => w.Id == SelectedWire); if (w is not null) Edit(() => w.Probe = !w.Probe, false); }
     public void ToggleBreakpoint() { var n = SelectedNode; if (n is not null) Edit(() => n.Breakpoint = !n.Breakpoint, false); }
     public void Copy()
@@ -202,12 +205,12 @@ public sealed class InstrumentSession
             foreach (var w in Diagram.Wires) if (nodes.ContainsKey(w.From) && nodes.TryGetValue(w.To, out var target) && target.Kind != "feedback") { edges[w.From].Add(w.To); indegree[w.To]++; }
             var queue = new Queue<string>(nodes.Keys.Where(x => indegree[x] == 0));
             while (queue.TryDequeue(out var id)) foreach (var target in edges[id]) { rank[target] = Math.Max(rank[target], rank[id] + 1); if (--indegree[target] == 0) queue.Enqueue(target); }
-            foreach (var group in Diagram.Nodes.GroupBy(n => rank[n.Id])) { var row = 0; foreach (var n in group) { n.X = 55 + group.Key * 210; n.Y = 65 + row++ * 150; } }
+            foreach (var group in Diagram.Nodes.GroupBy(n => rank[n.Id])) { var row = 0; foreach (var n in group) { n.X = 55 + group.Key * 360; n.Y = 65 + row++ * 230; } }
         }, false);
     }
     public void Validate() { _plan = null; Diagnostics = GraphCompiler.Validate(Diagram); }
     private CompiledGraph Plan() => _plan ??= GraphCompiler.Compile(Diagram);
-    private void ResetExecution() { _plan = null; _frame = null; _runtime.Reset(); ChartHistory.Clear(); Values = new Dictionary<string, Value>(); ActiveNode = null; }
+    private void ResetExecution() { _plan = null; _frame = null; _runtime.Reset(); ChartHistory.Clear(); Values = new Dictionary<string, Value>(); OutputValues = new Dictionary<SourceTerminal, Value>(); ActiveNode = null; }
     public void Run(bool continuous = false)
     {
         _continuous = continuous; IsPaused = false; IsRunning = true; Pump();
@@ -220,12 +223,13 @@ public sealed class InstrumentSession
         try
         {
             _frame ??= _runtime.Start(Plan());
+            var slice = System.Diagnostics.Stopwatch.StartNew(); var steps = 0;
             do
             {
-                var next = _frame.NextNodeId; var model = Find(next);
-                if (model?.Breakpoint == true && _skipBreakpoint != next) { _skipBreakpoint = next; IsPaused = true; ActiveNode = next; Status = $"Breakpoint: {model.Label}"; PublishFrame(); return; }
-                _skipBreakpoint = null; _frame.Step();
-                if (Highlight && !_frame.Completed) break;
+                var active = _frame.ActiveFrame; var model = active.NextNode; var next = model is null ? null : active.Path + "/" + model.Id;
+                if (model?.Breakpoint == true && !active.IsInsideStructure && _skipBreakpoint != next) { _skipBreakpoint = next; IsPaused = true; ActiveNode = model.Id; Status = $"Breakpoint: {model.Label}"; PublishFrame(); return; }
+                _skipBreakpoint = null; _frame.StepInto(); steps++;
+                if (!_frame.Completed && (Highlight || steps >= 4096 || (steps >= 16 && slice.Elapsed.TotalMilliseconds >= 8))) break;
             } while (!_frame.Completed);
             PublishFrame();
             if (_frame.Completed) { CompleteFrame(); _frame = null; IsRunning = _continuous; Status = _continuous ? "Running continuously · SIMULATED" : "Execution complete"; }
@@ -240,7 +244,7 @@ public sealed class InstrumentSession
     }
     private void PublishFrame()
     {
-        if (_frame is null) return; Values = _frame.Values; ActiveNode = _frame.LastNodeId; LastMilliseconds = _frame.ElapsedMilliseconds; LastNodeCount = _frame.EvaluatedNodes; Notify(SessionChange.Execution | SessionChange.View);
+        if (_frame is null) return; Values = _frame.Values; OutputValues = _frame.Outputs; ActiveNode = _frame.ActiveFrame.LastNodeId ?? _frame.LastNodeId; LastMilliseconds = _frame.ElapsedMilliseconds; LastNodeCount = _frame.EvaluatedNodes; Notify(SessionChange.Execution | SessionChange.View);
     }
     private void CompleteFrame()
     {

@@ -31,7 +31,7 @@ internal static class NodeResolver
         var inputs = new List<PortDefinition>(); var outputs = new List<OutputDefinition>();
         if (node.Kind == "for") inputs.Add(new("count", ValueKind.Number, false, contract.Inputs.Any(t => t.Indexing) ? 10000 : 10));
         if (node.Kind == "case") inputs.Add(new("selector", ValueKind.Boolean));
-        inputs.AddRange(contract.Inputs.Select(t => new PortDefinition(t.Name, t.Indexing ? ValueKind.Array : t.Type)));
+        inputs.AddRange(contract.Inputs.Select(t => new PortDefinition(t.Name, t.Indexing ? ValueKind.Array : t.Type, t.Required)));
         foreach (var r in contract.Registers.Where(r => r.Initialized))
             for (var i = 0; i < r.HistoryDepth; i++) inputs.Add(new("initial:" + r.Name + (i == 0 ? "" : ":" + i), r.Type, false));
         outputs.AddRange(contract.Outputs.Select(t => new OutputDefinition(t.Name, t.ExternalType)));

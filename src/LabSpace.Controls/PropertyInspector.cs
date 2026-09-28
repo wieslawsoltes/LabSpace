@@ -7,6 +7,7 @@ namespace LabSpace.Controls;
 public sealed class PropertyInspector : ScrollViewer, IDisposable
 {
     private readonly InstrumentSession _session;
+    public event Action<Node>? StructureRequested;
     private readonly StackPanel _fields = new() { Padding = new Thickness(10), Spacing = 7 };
     public PropertyInspector(InstrumentSession session)
     {
@@ -38,21 +39,28 @@ public sealed class PropertyInspector : ScrollViewer, IDisposable
             }
             return;
         }
-        var id = node.Id; var definition = NodeCatalog.Get(node.Kind); _fields.Children.Add(LabTheme.Text(definition.Title, 16));
+        var id = node.Id; var definition = NodeCatalog.Resolve(node); _fields.Children.Add(LabTheme.Text(definition.Title, 16));
         Field("Label", node.Label, text => _session.Edit(() => _session.Find(id)!.Label = text, false));
         if (node.Kind is "constant" or "control" or "bool" or "bool-control" or "feedback") Field("Value", node.Value.ToString("G17", CultureInfo.InvariantCulture), text => _session.SetValue(id, Number(text)));
-        if (node.Kind is "string" or "string-control" or "array" or "input" or "simulate") Field(node.Kind == "simulate" ? "Waveform (Sine / Square / Triangle)" : "Text", node.Text, text => _session.SetText(id, text));
+        if (node.Kind is "string" or "string-control" or "array" or "input" or "output" or "simulate") Field(node.Kind == "simulate" ? "Waveform (Sine / Square / Triangle)" : "Text", node.Text, text => _session.SetText(id, text));
+        if (node.Kind is "input" or "output")
+        {
+            var type = new ComboBox { ItemsSource = Enum.GetNames<ValueKind>(), SelectedItem = node.DataType.ToString(), FontSize = 12, MinHeight = 28 };
+            type.SelectionChanged += (_, _) => { if (type.SelectedItem is string value && value != node.DataType.ToString()) Apply(() => _session.Edit(() => _session.Find(id)!.DataType = Enum.Parse<ValueKind>(value))); };
+            _fields.Children.Add(LabTheme.Text("Connector type", 11)); _fields.Children.Add(type);
+        }
         foreach (var parameter in node.Parameters.ToArray())
         {
             var key = parameter.Key; Field(key, parameter.Value.ToString("G17", CultureInfo.InvariantCulture), text => _session.Edit(() => _session.Find(id)!.Parameters[key] = Number(text), false));
         }
-        foreach (var port in definition.Inputs.Where(p => !p.Required && !node.Parameters.ContainsKey(p.Name)))
+        foreach (var port in definition.Inputs.Where(p => !p.Required && (p.Kind is ValueKind.Number or ValueKind.Boolean) && !node.Parameters.ContainsKey(p.Name)))
         {
             if (_session.Diagram.Wires.Any(w => w.To == id && w.Input == port.Name)) continue;
             var key = port.Name; Field("Default " + key, port.Default.ToString(CultureInfo.InvariantCulture), text => _session.Edit(() => _session.Find(id)!.Parameters[key] = Number(text), false));
         }
         if (definition.IsStructure)
         {
+            _fields.Children.Add(new LabButton("Tunnels and shift registers…", () => StructureRequested?.Invoke(node), flat: false));
             _fields.Children.Add(new LabButton("Edit " + (node.Kind == "case" ? "TRUE branch" : "body"), () => _session.Enter(id), flat: false));
             if (node.Kind == "case") _fields.Children.Add(new LabButton("Edit FALSE branch", () => _session.Enter(id, true), flat: false));
         }
@@ -70,5 +78,5 @@ public sealed class PropertyInspector : ScrollViewer, IDisposable
             Field("Height", panel.Bounds.Height.ToString(CultureInfo.InvariantCulture), text => _session.Edit(() => panel.Bounds = panel.Bounds with { Height = Number(text) }, false));
         }
     }
-    public void Dispose() => _session.Changed -= Changed;
+    public new void Dispose() => _session.Changed -= Changed;
 }

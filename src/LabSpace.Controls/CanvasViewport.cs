@@ -70,5 +70,5 @@ public abstract class CanvasViewport : UserControl, IDisposable
     }
     protected abstract SKRect ContentBounds();
     protected abstract void Paint(SKCanvas canvas, SKRect viewport);
-    public virtual void Dispose() { Session.Changed -= SessionChanged; Canvas.Paint = null; }
+    public new virtual void Dispose() { Session.Changed -= SessionChanged; Canvas.Paint = null; }
 }
