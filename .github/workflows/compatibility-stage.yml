@@ -17,29 +17,20 @@ jobs:
       - uses: actions/setup-dotnet@v4
         with:
           global-json-file: global.json
-      - name: Integrate verified classic editor source
-        env:
-          GH_TOKEN: ${{ github.token }}
+      - name: Complete typed front-panel gestures
         run: |
           python3 - <<'PY'
-          import base64,bz2,hashlib,json,subprocess
-          parts=['8efaf57280e44d08b8b42eb4beb6c166855a7e95','d6758ed1e77ece66663644a93a2c4fa3301d07ae','4f06e76ea2aae59e8de1d4f9c5dbe6e2419f2898','66026878b56901fdd65cee359809a83761e74dd3','c94214d82cc68b4db9e22231d441ad7d7e3f8a5d','b797d893fdecca8795db45741639d1cb50d45f97']
-          chunks=[]
-          for expected in parts:
-              obj=json.loads(subprocess.check_output(['gh','api','repos/wieslawsoltes/LabSpace/git/blobs/'+expected]))
-              data=base64.b64decode(obj['content'])
-              assert hashlib.sha1(b'blob '+str(len(data)).encode()+b'\0'+data).hexdigest()==expected
-              chunks.append(data)
-          patch=bz2.decompress(b''.join(chunks))
-          assert hashlib.sha256(patch).hexdigest()=='15d3727bb0f18841a4251360a3f3ac04d9b89777ab3099faefb5d480ce4415a5'
-          open('/tmp/classic-editor.patch','wb').write(patch)
+          from pathlib import Path
+          p=Path('src/LabSpace.Controls/FrontPanelSurface.cs')
+          s=p.read_text().replace('_knob = _item.Widget == "Knob"; _slider = !_knob;', '_operating = true;')
+          s=s.replace('            node.Value = Math.Clamp(_item.Widget', '            var next = Math.Clamp(_item.Widget')
+          s=s.replace('            Session.Notify(SessionChange.View);', '            if (node.Kind == "typed-control" && node.Type is { } type)\n                node.Text = ValueConversion.Coerce(Value.Numeric(next), type).ToString();\n            else node.Value = next;\n            Session.Notify(SessionChange.View);')
+          p.write_text(s)
           PY
-          git apply --check /tmp/classic-editor.patch
-          git apply /tmp/classic-editor.patch
           git config user.name 'Wiesław Šoltés'
           git config user.email 'wieslawsoltes@users.noreply.github.com'
-          git add src tests
-          git commit -m 'feat: integrate classic diagram terminals, typed editors, indexed structures and routed wire editing'
+          git add src
+          git commit -m 'fix: operate typed numeric knobs and sliders through exact typed values'
           git push
       - name: Test executable semantics and routing
         run: dotnet test tests/LabSpace.Tests -c Release --logger 'trx;LogFileName=typed.trx' --results-directory artifacts/tests
