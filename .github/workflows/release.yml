@@ -1,0 +1,53 @@
+name: Release packages
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  package:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+      - name: Prepare toolchain
+        run: |
+          dotnet workload install wasm-tools --skip-manifest-update
+          python3 scripts/fetch-assets.py
+      - name: Test engines
+        run: dotnet test tests/LabSpace.Tests -c Release
+      - name: Pack reusable libraries
+        run: |
+          set -euo pipefail
+          for project in src/*/*.csproj; do
+            case "$project" in */LabSpace.App/*) continue;; esac
+            dotnet pack "$project" -c Release -o artifacts/packages
+          done
+      - name: Publish browser distribution
+        run: |
+          dotnet publish src/LabSpace.App -f net10.0-browserwasm -c Release -o artifacts/publish -p:WasmShellWebAppBasePath=/LabSpace/
+          python3 scripts/collect-site.py artifacts/publish artifacts/site
+          cd artifacts/site && zip -qr ../LabSpace-browser.zip .
+      - name: Record engine performance baseline
+        run: |
+          mkdir -p artifacts/benchmarks
+          dotnet run --project tools/LabSpace.Benchmarks -c Release -- 1000 > artifacts/benchmarks/engine.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: LabSpace-release
+          path: |
+            artifacts/packages
+            artifacts/LabSpace-browser.zip
+            artifacts/benchmarks
+      - name: Publish tagged GitHub release
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "${GITHUB_REF_NAME}" artifacts/packages/* artifacts/LabSpace-browser.zip artifacts/benchmarks/engine.json --verify-tag --title "LabSpace ${GITHUB_REF_NAME}" --generate-notes --prerelease

@@ -37,6 +37,8 @@ jobs:
           npx playwright install --with-deps chromium
           python3 scripts/serve-site.py --directory artifacts/site --port 4173 > artifacts/server.log 2>&1 &
           npm run test:browser
+          mkdir -p artifacts/site/screenshots
+          cp artifacts/screenshots/*.png artifacts/site/screenshots/
       - uses: actions/upload-artifact@v4
         if: always()
         with:

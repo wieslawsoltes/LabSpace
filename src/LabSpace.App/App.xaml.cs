@@ -33,7 +33,11 @@ public partial class App : Application
 #endif
             var project = Examples.Create(); string? warning = null;
             try { var recovery = await storage.ReadRecoveryAsync(); if (!string.IsNullOrWhiteSpace(recovery)) project = ProjectSerializer.Load(recovery); }
-            catch (Exception error) { warning = "Recovery could not be opened; the previous data has not been deleted: " + error.Message; }
+            catch (Exception error)
+            {
+                storage = new ProtectedRecoveryStorage(storage);
+                warning = "Recovery could not be opened. Automatic recovery is protected until an explicit project save: " + error.Message;
+            }
             var font = await StorageFile.GetFileFromApplicationUriAsync(new Uri("ms-appx:///Assets/Fonts/Carlito-Regular.ttf"));
             using (var stream = await font.OpenStreamForReadAsync()) { using var buffer = new MemoryStream(); await stream.CopyToAsync(buffer); buffer.Position = 0; _fonts.Load(buffer); }
             LabTheme.Font = new FontFamily("ms-appx:///Assets/Fonts/Carlito-Regular.ttf#Carlito");
@@ -48,7 +52,7 @@ public partial class App : Application
 #endif
                 _workbench.Dispose(); _fonts.Dispose();
             };
-            if (warning is not null) session.Message(warning);
+            if (warning is not null) _workbench.Loaded += (_, _) => session.Message(warning);
         }
         catch (Exception error)
         {

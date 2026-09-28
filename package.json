@@ -4,5 +4,5 @@
   "version": "0.1.0",
   "type": "module",
   "scripts": { "test:browser": "playwright test" },
-  "devDependencies": { "@playwright/test": "1.56.1" }
+  "devDependencies": { "@playwright/test": "1.56.1", "pngjs": "7.0.0" }
 }
