@@ -1,8 +1,11 @@
 namespace LabSpace.Core;
 
+public sealed record OutputDefinition(string Name, ValueKind Kind);
 public sealed record PortDefinition(string Name, ValueKind Kind, bool Required = true, double Default = 0);
 public sealed record NodeDefinition(string Kind, string Title, string Category, string Glyph, string Description, PortDefinition[] Inputs, ValueKind Output, bool HasOutput = true)
 {
+    public OutputDefinition[] Outputs { get; init; } = HasOutput ? [new("result", Output)] : [];
+    public OutputDefinition? FindOutput(string name) => Outputs.FirstOrDefault(p => p.Name == name) ?? (name == "result" && Outputs.Length > 0 ? Outputs[0] : null);
     public bool IsControl => Kind is "control" or "bool-control" or "string-control";
     public bool IsIndicator => Kind is "indicator" or "bool-indicator" or "string-indicator" or "graph" or "chart" or "array-indicator";
     public bool IsStructure => Kind is "for" or "while" or "case" or "subvi";
@@ -18,6 +21,7 @@ public static class NodeCatalog
     public static readonly IReadOnlyList<NodeDefinition> All = Create();
     private static readonly IReadOnlyDictionary<string, NodeDefinition> Map = All.ToDictionary(x => x.Kind);
     public static NodeDefinition Get(string kind) => Map.TryGetValue(kind, out var value) ? value : throw new ArgumentException($"Unknown function '{kind}'.");
+    public static NodeDefinition Resolve(Node node) => NodeResolver.Resolve(node);
     public static bool TryGet(string kind, out NodeDefinition definition) => Map.TryGetValue(kind, out definition!);
     private static List<NodeDefinition> Create()
     {
@@ -65,13 +69,14 @@ public static class NodeCatalog
         Add("time", "Elapsed time", "Timing", "t", "Logical acquisition time in seconds, advanced between completed frames.", ValueKind.Number, true);
         Add("random", "Random number", "Numeric", "?01", "Deterministic pseudo-random value in [0,1), reproducible for a fresh runtime.", ValueKind.Number, true);
         Add("feedback", "Feedback node", "Structures", "z⁻¹", "Returns previous completed frame input. Value is the initial state. Explicitly breaks a dataflow cycle.", ValueKind.Number, true, N("x", false));
-        Add("input", "Connector input", "Structures", "in", "Numeric argument in a nested diagram. Text is state, i or x.", ValueKind.Number, true);
-        Add("output", "Connector output", "Structures", "out", "Numeric result of a nested diagram.", ValueKind.Number, false, N("x"));
+        Add("input", "Connector input", "Structures", "in", "Typed argument in a nested diagram. Text names the tunnel, register or iteration terminal.", ValueKind.Number, true);
+        Add("output", "Connector output", "Structures", "out", "Typed named result of a nested diagram.", ValueKind.Number, false, N("x"));
         Add("stop", "Loop condition", "Structures", "STOP", "Stops a while loop after the current iteration when TRUE.", ValueKind.Boolean, false, B("x"));
-        Add("for", "For Loop", "Structures", "FOR", "Executes Body count times. Body inputs: state, i. Body output: Connector output. count must be an integer in [0,10000].", ValueKind.Number, true, N("count", false, 10), N("initial", false));
-        Add("while", "While Loop", "Structures", "WHILE", "Executes Body at least once, carrying state until Loop condition is TRUE. Safety limit: 10,000 iterations and shared node budget.", ValueKind.Number, true, N("initial", false));
-        Add("case", "Case Structure", "Structures", "CASE", "Executes only the selected numeric branch. TRUE uses Body; FALSE uses Alternative. Argument: state.", ValueKind.Number, true, B("selector"), N("initial", false));
-        Add("subvi", "SubVI", "Structures", "VI", "Executes an embedded reusable numeric diagram. Argument state receives x. Double-click to edit the body.", ValueKind.Number, true, N("x", false));
+        Add("for", "For Loop", "Structures", "FOR", "For Loop with optional typed tunnels, auto-indexing and stacked shift registers. Double-click to edit its body.", ValueKind.Number, true, N("count", false, 10), N("initial", false));
+        Add("while", "While Loop", "Structures", "WHILE", "While Loop with typed tunnels and shift registers. Safety limit: 10,000 iterations and a shared node budget.", ValueKind.Number, true, N("initial", false));
+        Add("case", "Case Structure", "Structures", "CASE", "Executes only the selected branch. TRUE uses Body; FALSE uses Alternative. Supports named typed tunnels.", ValueKind.Number, true, B("selector"), N("initial", false));
+        Add("subvi", "SubVI", "Structures", "VI", "Executes an embedded reusable diagram with a named typed connector contract. Double-click to edit the body.", ValueKind.Number, true, N("x", false));
+        ExtendedNodeCatalog.Append(result);
         return result;
     }
 }

@@ -82,7 +82,7 @@ public sealed class EngineTests
     }
     [Fact] public void UnknownFormatIsRejected()
     {
-        var project = Examples.Create(); project.FormatVersion = 2; Assert.Throws<InvalidDataException>(() => ProjectSerializer.Save(project));
+        var project = Examples.Create(); project.FormatVersion = 999; Assert.Throws<InvalidDataException>(() => ProjectSerializer.Save(project));
     }
     [Fact] public void OversizedInputIsRejected() => Assert.Throws<InvalidDataException>(() => ProjectSerializer.Load(new string(' ', ProjectSerializer.MaximumBytes + 1)));
     [Fact] public void InputArraysCannotBeMutated()
