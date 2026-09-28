@@ -87,7 +87,7 @@ public sealed class FrontPanelSurface : CanvasViewport
             var node = Session.Instrument.Diagram.Nodes.First(n => n.Id == _item.NodeId);
             var next = Math.Clamp(_item.Widget == "Slider" ? _item.Minimum + (p.X - _bounds.X) / _bounds.Width * (_item.Maximum - _item.Minimum) : _value + (dx - dy) / 180 * (_item.Maximum - _item.Minimum), _item.Minimum, _item.Maximum);
             if (node.Kind == "typed-control" && node.Type is { } type)
-                node.Text = ValueConversion.Coerce(Value.Numeric(next), type).ToString();
+                node.Text = ValueConversion.Convert(Value.Numeric(next), type).ToString();
             else node.Value = next;
             Session.Notify(SessionChange.View);
         }
