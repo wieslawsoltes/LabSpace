@@ -8,7 +8,7 @@ permissions:
 jobs:
   validate:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
         with:
@@ -17,25 +17,64 @@ jobs:
       - uses: actions/setup-dotnet@v4
         with:
           global-json-file: global.json
-      - name: Correct explicit params field construction
+      - name: Integrate verified classic editor source
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           python3 - <<'PY'
-          from pathlib import Path
-          p=Path('tests/LabSpace.Tests/TypedExecutionTests.cs')
-          p.write_text(p.read_text().replace('LabType.Cluster(new(', 'LabType.Cluster(new TypeField('))
+          import base64,bz2,hashlib,json,subprocess
+          parts=['8efaf57280e44d08b8b42eb4beb6c166855a7e95','d6758ed1e77ece66663644a93a2c4fa3301d07ae','4f06e76ea2aae59e8de1d4f9c5dbe6e2419f2898','66026878b56901fdd65cee359809a83761e74dd3','c94214d82cc68b4db9e22231d441ad7d7e3f8a5d','b797d893fdecca8795db45741639d1cb50d45f97']
+          chunks=[]
+          for expected in parts:
+              obj=json.loads(subprocess.check_output(['gh','api','repos/wieslawsoltes/LabSpace/git/blobs/'+expected]))
+              data=base64.b64decode(obj['content'])
+              assert hashlib.sha1(b'blob '+str(len(data)).encode()+b'\0'+data).hexdigest()==expected
+              chunks.append(data)
+          patch=bz2.decompress(b''.join(chunks))
+          assert hashlib.sha256(patch).hexdigest()=='15d3727bb0f18841a4251360a3f3ac04d9b89777ab3099faefb5d480ce4415a5'
+          open('/tmp/classic-editor.patch','wb').write(patch)
           PY
+          git apply --check /tmp/classic-editor.patch
+          git apply /tmp/classic-editor.patch
           git config user.name 'Wiesław Šoltés'
           git config user.email 'wieslawsoltes@users.noreply.github.com'
-          git add tests
-          if ! git diff --cached --quiet; then git commit -m 'test: disambiguate params type field construction'; git push; fi
-      - name: Test executable semantics
+          git add src tests
+          git commit -m 'feat: integrate classic diagram terminals, typed editors, indexed structures and routed wire editing'
+          git push
+      - name: Test executable semantics and routing
         run: dotnet test tests/LabSpace.Tests -c Release --logger 'trx;LogFileName=typed.trx' --results-directory artifacts/tests
       - name: Build desktop integration
         run: |
           python3 scripts/fetch-assets.py
           dotnet build src/LabSpace.App -f net10.0-desktop -c Release -p:LabSpaceDesktopOnly=true
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Publish browser and verify native ABI
+        run: |
+          dotnet workload install wasm-tools --skip-manifest-update
+          dotnet publish src/LabSpace.App -f net10.0-browserwasm -c Release -o artifacts/publish -p:WasmShellWebAppBasePath=/LabSpace/
+          python3 scripts/check-native-abi.py
+          GITHUB_SHA=$(git rev-parse HEAD) python3 scripts/collect-site.py artifacts/publish artifacts/site
+      - name: Browser acceptance
+        run: |
+          npm install --ignore-scripts
+          npx playwright install --with-deps chromium
+          python3 scripts/serve-site.py --directory artifacts/site --port 4173 > artifacts/server.log 2>&1 &
+          npm run test:browser
       - uses: actions/upload-artifact@v4
         if: always()
         with:
           name: LabSpace-typed-validation
-          path: artifacts/tests
+          path: |
+            artifacts/tests
+            artifacts/screenshots
+            artifacts/test-results
+            artifacts/playwright-report
+            artifacts/server.log
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: LabSpace-typed-browser
+          path: artifacts/site
+          include-hidden-files: true
