@@ -45,6 +45,7 @@ public sealed partial class InstrumentSession
     public IReadOnlyList<Diagnostic> Diagnostics { get; private set; } = [];
     public long Revision { get; private set; }
     public bool Dirty { get; private set; }
+    public bool IsGestureActive => _gesture is not null;
     public bool CanUndo => _undo.Count > 0;
     public bool CanRedo => _redo.Count > 0;
     public bool IsRunning { get; private set; }
@@ -147,7 +148,7 @@ public sealed partial class InstrumentSession
             }
         }); Select(result!.Id); return result;
     }
-    public void Connect(string from, string to, string input, string output = "value")
+    public void Connect(string from, string to, string input, string output = "value", IReadOnlyList<PointD>? waypoints = null)
     {
         var a = Find(from) ?? throw new ArgumentException("Source node is missing."); var b = Find(to) ?? throw new ArgumentException("Target node is missing.");
         var source = NodeCatalog.Describe(a); var port = NodeCatalog.Describe(b).Inputs.FirstOrDefault(p => p.Name == input) ?? throw new ArgumentException("Input terminal is missing.");
@@ -156,7 +157,7 @@ public sealed partial class InstrumentSession
         Edit(() =>
         {
             Diagram.Wires.RemoveAll(w => w.To == to && w.Input == input);
-            Diagram.Wires.Add(new() { From = from, To = to, Input = input, Output = output });
+            Diagram.Wires.Add(new() { From = from, To = to, Input = input, Output = output, Waypoints = waypoints?.ToList() ?? [] });
             var error = GraphCompiler.Validate(Diagram).FirstOrDefault(e => e.Code is "CYCLE" or "TYPE" or "DRIVER");
             if (error is not null) throw new ArgumentException(error.Message);
         }); Message("Wire connected");
@@ -192,7 +193,7 @@ public sealed partial class InstrumentSession
         {
             Selection.Clear();
             foreach (var n in clip.Diagram.Nodes) { n.Id = ids[n.Id]; n.X += 30; n.Y += 30; Diagram.Nodes.Add(n); Selection.Add(n.Id); }
-            foreach (var w in clip.Diagram.Wires) { w.Id = Guid.NewGuid().ToString("N"); w.From = ids[w.From]; w.To = ids[w.To]; Diagram.Wires.Add(w); }
+            foreach (var w in clip.Diagram.Wires) { w.Id = Guid.NewGuid().ToString("N"); w.From = ids[w.From]; w.To = ids[w.To]; w.Waypoints = w.Waypoints.Select(p => new PointD(p.X + 30, p.Y + 30)).ToList(); Diagram.Wires.Add(w); }
             if (_path.Count == 0) foreach (var p in clip.Panel) { p.Id = Guid.NewGuid().ToString("N"); p.NodeId = ids[p.NodeId]; p.Bounds = p.Bounds with { X = p.Bounds.X + 30, Y = p.Bounds.Y + 30 }; Instrument.Panel.Add(p); }
         });
     }
@@ -205,7 +206,14 @@ public sealed partial class InstrumentSession
             foreach (var w in Diagram.Wires) if (nodes.ContainsKey(w.From) && nodes.TryGetValue(w.To, out var target) && target.Kind != "feedback") { edges[w.From].Add(w.To); indegree[w.To]++; }
             var queue = new Queue<string>(nodes.Keys.Where(x => indegree[x] == 0));
             while (queue.TryDequeue(out var id)) foreach (var target in edges[id]) { rank[target] = Math.Max(rank[target], rank[id] + 1); if (--indegree[target] == 0) queue.Enqueue(target); }
-            foreach (var group in Diagram.Nodes.GroupBy(n => rank[n.Id])) { var row = 0; foreach (var n in group) { n.X = 55 + group.Key * 210; n.Y = 65 + row++ * 150; } }
+            var x = 170d;
+            foreach (var group in Diagram.Nodes.GroupBy(n => rank[n.Id]).OrderBy(g => g.Key))
+            {
+                var y = 65d;
+                foreach (var n in group) { n.X = x; n.Y = y; y += NodeCatalog.Describe(n).IsStructure ? 300 : 110; }
+                x += group.Any(n => NodeCatalog.Describe(n).IsStructure) ? 440 : 240;
+            }
+            foreach (var wire in Diagram.Wires) wire.Waypoints.Clear();
         }, false);
     }
     public void Validate() { _plan = null; Diagnostics = GraphCompiler.Validate(Diagram); }

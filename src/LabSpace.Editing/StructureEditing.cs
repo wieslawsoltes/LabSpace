@@ -50,15 +50,33 @@ public sealed partial class InstrumentSession
         foreach (var n in body.Nodes.Where(n => n.Kind == "tunnel-out")) n.Type = contract.Outputs.First(t => t.Name == n.Text).Type;
         if (needsStop && !body.Nodes.Any(n => n.Kind == "stop")) body.Nodes.Add(Examples.NewNode("stop", 570, 380));
     }
+    public void SetTypedLiteral(string id, LabType type, string literal)
+    {
+        type.Validate(); _ = ValueLiteral.Parse(type, literal);
+        Edit(() =>
+        {
+            var node = Find(id) ?? throw new ArgumentException("Node is missing.");
+            if (node.Kind is not ("typed-control" or "typed-constant")) throw new ArgumentException("Select a typed control or constant.");
+            node.Type = type; node.Text = literal; UpdateWidget(id, type);
+        });
+    }
+    private void UpdateWidget(string id, LabType type)
+    {
+        var panel = Path.Count == 0 ? Instrument.Panel.FirstOrDefault(p => p.NodeId == id) : null;
+        if (panel is null) return;
+        var widget = type.Kind switch { ValueKind.Array => "Array", ValueKind.Cluster => "Cluster", ValueKind.Error => "Error", ValueKind.Enum => "Enum", ValueKind.Boolean => NodeCatalog.Describe(Find(id)!).IsControl ? "Switch" : "LED", ValueKind.String => "String", _ => "Numeric" };
+        if (type.IsNumeric && panel.Widget is "Numeric" or "Knob" or "Slider" or "Gauge" or "Meter" or "Thermometer" or "Tank") return;
+        panel.Widget = widget;
+        if (widget is "Cluster" or "Error" or "Array") panel.Bounds = panel.Bounds with { Width = Math.Max(260, panel.Bounds.Width), Height = Math.Max(150, panel.Bounds.Height) };
+    }
     public void SetType(string id, LabType type)
     {
         type.Validate(); Edit(() =>
         {
             var node = Find(id) ?? throw new ArgumentException("Node is missing."); node.Type = type;
-            if (node.Kind is "typed-control" or "typed-constant") { try { _ = ValueLiteral.Parse(type, node.Text); } catch { node.Text = ""; } }
+            if (node.Kind is "typed-control" or "typed-constant") { _ = ValueLiteral.Parse(type, node.Text); }
             _ = NodeCatalog.Describe(node);
-            var panel = Path.Count == 0 ? Instrument.Panel.FirstOrDefault(p => p.NodeId == id) : null;
-            if (panel is not null) panel.Widget = type.Kind switch { ValueKind.Array => "Array", ValueKind.Cluster => "Cluster", ValueKind.Error => "Error", ValueKind.Enum => "Enum", ValueKind.Boolean => NodeCatalog.Describe(node).IsControl ? "Switch" : "LED", ValueKind.String => "String", _ => "Numeric" };
+            UpdateWidget(id, type);
         });
     }
 }

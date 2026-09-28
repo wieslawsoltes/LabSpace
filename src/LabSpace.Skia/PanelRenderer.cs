@@ -24,10 +24,8 @@ public sealed class PanelRenderer : IDisposable
         {
             if (!nodes.TryGetValue(item.NodeId, out var node)) continue;
             var r = Rect(item.Bounds); if (!r.IntersectsWith(viewport)) continue;
-            var def = NodeCatalog.Get(node.Kind); session.Values.TryGetValue(node.Id, out var output);
-            var value = def.IsControl ? node.Value : output?.Number ?? 0;
-            var boolean = def.IsControl ? node.Value != 0 : output?.Boolean ?? false;
-            var text = def.IsControl ? node.Text : output?.Text ?? "";
+            var def = NodeCatalog.Describe(node); var output = session.DisplayValue(node);
+            var value = output.Number; var boolean = output.Boolean; var text = output.Text;
             _d.Text(c, node.Label, r.Left + 2, r.Top + 13, 13);
             var body = new SKRect(r.Left, r.Top + 22, r.Right, r.Bottom);
             switch (item.Widget)
@@ -43,8 +41,12 @@ public sealed class PanelRenderer : IDisposable
                     var spectrum = source is not null && nodes.TryGetValue(source, out var sourceNode) && sourceNode.Kind == "fft";
                     _plots.Draw(c, body, output, history, spectrum, Cursors.TryGetValue(item.Id, out var cursor) ? cursor : null); break;
                 case "Knob": DrawKnob(c, body, item, value); break;
-                case "Gauge": DrawGauge(c, body, item, value); break;
+                case "Meter": case "Gauge": DrawGauge(c, body, item, value); break;
                 case "Slider": DrawSlider(c, body, item, value); break;
+                case "Thermometer": case "Tank": DrawVertical(c, body, item, value, item.Widget == "Tank"); break;
+                case "Cluster": case "Error": DrawStructured(c, body, output); break;
+                case "Enum":
+                    _d.Bevel(c, body, "#FFFFFF", true); _d.Text(c, output.ToString(), body.Left + 7, body.Top + 23, 14); _d.Text(c, "▾", body.Right - 12, body.Top + 23, 12, center: true); break;
                 case "LED":
                     var radius = Math.Min(19, body.Height / 3); _d.Circle(c, body.MidX, body.MidY, radius + 3, LabDrawing.Color("#686868")); _d.Circle(c, body.MidX, body.MidY, radius, LabDrawing.Color(boolean ? "#5DD14A" : "#304C2C")); _d.Circle(c, body.MidX - radius / 3, body.MidY - radius / 3, radius / 4, LabDrawing.Color(boolean ? "#B7F29E" : "#597454")); break;
                 case "Switch":
@@ -52,9 +54,13 @@ public sealed class PanelRenderer : IDisposable
                 case "String":
                     _d.Bevel(c, body, "#FFFFFF", true); c.Save(); c.ClipRect(body); _d.Text(c, text, body.Left + 7, body.Top + 22, 14); c.Restore(); break;
                 case "Array":
-                    _d.Bevel(c, body, "#FFFFFF", true); if (output is not null) for (var i = 0; i < Math.Min(output.Samples.Length, (int)body.Height / 19); i++) { _d.Text(c, $"[{i}]", body.Left + 5, body.Top + 16 + i * 19, 11, "#888888"); _d.Text(c, output.Samples[i].ToString("G6", CultureInfo.InvariantCulture), body.Left + 45, body.Top + 16 + i * 19, 12); } break;
+                    _d.Bevel(c, body, "#FFFFFF", true); c.Save(); c.ClipRect(body);
+                    _d.Text(c, TypeSyntax.Format(output.Type) + "  " + string.Join(" × ", output.Shape), body.Left + 5, body.Top + 15, 10, "#777777");
+                    for (var i = 0; i < Math.Min(output.Count, Math.Max(0, (int)(body.Height - 22) / 19)); i++)
+                    { _d.Text(c, $"[{i}]", body.Left + 5, body.Top + 34 + i * 19, 11, "#888888"); _d.Text(c, output.ElementAt(i).ToString(), body.Left + 45, body.Top + 34 + i * 19, 12); }
+                    c.Restore(); break;
                 default:
-                    var field = new SKRect(body.Left + (def.IsControl ? 15 : 0), body.Top + 6, body.Right, Math.Min(body.Bottom, body.Top + 45)); _d.Bevel(c, field, def.IsControl ? "#FFFFFF" : "#D9D9D9", true); _d.Text(c, value.ToString("G7", CultureInfo.InvariantCulture), field.Left + 9, field.Top + 26, 21);
+                    var field = new SKRect(body.Left + (def.IsControl ? 15 : 0), body.Top + 6, body.Right, Math.Min(body.Bottom, body.Top + 45)); _d.Bevel(c, field, def.IsControl ? "#FFFFFF" : "#D9D9D9", true); c.Save(); c.ClipRect(field); _d.Text(c, output.ToString(), field.Left + 7, field.Top + 26, output.ToString().Length > 14 ? 14 : 21); c.Restore();
                     if (def.IsControl) { _d.Bevel(c, new(body.Left, field.Top, body.Left + 14, field.MidY)); _d.Text(c, "+", body.Left + 7, field.Top + 14, 11, center: true); _d.Bevel(c, new(body.Left, field.MidY, body.Left + 14, field.Bottom)); _d.Text(c, "−", body.Left + 7, field.Bottom - 5, 11, center: true); }
                     break;
             }
@@ -96,6 +102,38 @@ public sealed class PanelRenderer : IDisposable
         var cy = b.MidY; _d.Bevel(c, new(b.Left + 8, cy - 4, b.Right - 8, cy + 4), "#777777", true);
         var x = b.Left + 8 + (float)Fraction(item, value) * (b.Width - 16); _d.Bevel(c, new(x - 7, cy - 16, x + 7, cy + 16));
         _d.Text(c, value.ToString("G5", CultureInfo.InvariantCulture), b.MidX, b.Bottom - 3, 12, center: true);
+    }
+    private void DrawStructured(SKCanvas c, SKRect b, Value value)
+    {
+        _d.Bevel(c, b, "#D7D7D7"); c.Save(); c.ClipRect(b); var y = b.Top + 19;
+        if (value.Kind == ValueKind.Error)
+        {
+            _d.Circle(c, b.Left + 14, y - 4, 6, LabDrawing.Color(value.Boolean ? "#CA2828" : "#53A652"));
+            _d.Text(c, value.Boolean ? "Error" : "No error", b.Left + 28, y, 12); y += 24;
+            _d.Text(c, "code: " + value.Integer, b.Left + 8, y, 12); y += 24; _d.Text(c, "source: " + value.Text, b.Left + 8, y, 12);
+        }
+        else foreach (var field in value.Type.Fields)
+        {
+            if (y > b.Bottom - 5) break;
+            _d.Text(c, field.Name, b.Left + 8, y, 11, "#666666");
+            _d.Text(c, value.Fields[field.Name].ToString(), b.Left + Math.Min(105, b.Width / 2), y, 12); y += 25;
+        }
+        c.Restore();
+    }
+    private void DrawVertical(SKCanvas c, SKRect b, PanelItem item, double value, bool tank)
+    {
+        var width = tank ? Math.Min(70, b.Width / 2) : 14;
+        var track = new SKRect(b.Left + 22, b.Top + 7, b.Left + 22 + width, b.Bottom - 29);
+        _d.Bevel(c, track, "#F4F4F4", true);
+        var liquid = new SKRect(track.Left + 3, track.Bottom - 3 - (float)Fraction(item, value) * (track.Height - 6), track.Right - 3, track.Bottom - 3);
+        _d.Rect(c, liquid, LabDrawing.Color(tank ? "#2E80B8" : "#CB3229"));
+        if (!tank) _d.Circle(c, track.MidX, track.Bottom, 11, LabDrawing.Color("#CB3229"));
+        for (var i = 0; i <= 10; i++)
+        {
+            var y = track.Bottom - i * track.Height / 10; _d.Line(c, track.Right + 5, y, track.Right + (i % 2 == 0 ? 13 : 9), y, SKColors.Black);
+            if (i % 2 == 0) _d.Text(c, (item.Minimum + (item.Maximum - item.Minimum) * i / 10).ToString("G3", CultureInfo.InvariantCulture), track.Right + 17, y + 4, 10);
+        }
+        _d.Text(c, value.ToString("G5", CultureInfo.InvariantCulture), b.MidX, b.Bottom - 3, 13, center: true);
     }
     public void Dispose() { _history.Clear(); _d.Dispose(); }
 }

@@ -28,7 +28,7 @@ public sealed class FrontPanelSurface : CanvasViewport
         var point = e.GetCurrentPoint(Canvas); if (!point.Properties.IsLeftButtonPressed) return;
         _start = ToWorld(point.Position); _item = Hit(_start);
         if (_item is null) { Session.Select(null); return; }
-        Session.Select(_item.NodeId); var node = Session.Instrument.Diagram.Nodes.First(n => n.Id == _item.NodeId); var def = NodeCatalog.Get(node.Kind); _bounds = _item.Bounds; _value = node.Value;
+        Session.Select(_item.NodeId); var node = Session.Instrument.Diagram.Nodes.First(n => n.Id == _item.NodeId); var def = NodeCatalog.Describe(node); _bounds = _item.Bounds; _value = Session.DisplayValue(node).Number;
         if (Session.PanelEditMode)
         {
             _resize = Math.Abs(_start.X - _bounds.Right) < 15 / Zoom && Math.Abs(_start.Y - _bounds.Bottom) < 15 / Zoom;
@@ -40,7 +40,29 @@ public sealed class FrontPanelSurface : CanvasViewport
         }
         else if (def.IsControl)
         {
-            if (node.Kind == "bool-control") Safe(() => Session.SetValue(node.Id, node.Value == 0 ? 1 : 0));
+            if (node.Kind == "typed-control")
+            {
+                var current = Session.DisplayValue(node);
+                if (current.Kind == ValueKind.Boolean) Safe(() => Session.SetText(node.Id, current.Boolean ? "false" : "true"));
+                else if (current.Kind == ValueKind.Enum) Safe(() => Session.SetText(node.Id, ((current.Integer + 1) % current.Type.Labels.Length).ToString(System.Globalization.CultureInfo.InvariantCulture)));
+                else if (current.Type.IsNumeric && _item.Widget is "Knob" or "Slider") { Session.BeginGesture(); _knob = _item.Widget == "Knob"; _slider = !_knob; Canvas.CapturePointer(e.Pointer); }
+                else if (current.Type.IsNumeric && _item.Widget == "Numeric" && _start.X < _item.Bounds.X + 16)
+                {
+                    var delta = _start.Y < _item.Bounds.Y + 43 ? 1 : -1;
+                    Safe(() =>
+                    {
+                        if (current.Type.IsInteger)
+                        {
+                            var (min, max) = ValueConversion.Range(current.Type);
+                            var exact = System.Numerics.BigInteger.Clamp(ValueConversion.ExactInteger(current) + delta, min, max);
+                            Session.SetText(node.Id, exact.ToString(System.Globalization.CultureInfo.InvariantCulture));
+                        }
+                        else Session.SetText(node.Id, (current.Number + delta).ToString("G17", System.Globalization.CultureInfo.InvariantCulture));
+                    });
+                }
+                else EditRequested?.Invoke(node);
+            }
+            else if (node.Kind == "bool-control") Safe(() => Session.SetValue(node.Id, node.Value == 0 ? 1 : 0));
             else if (node.Kind == "string-control") EditRequested?.Invoke(node);
             else if (_item.Widget is "Knob" or "Slider") { Session.BeginGesture(); _operating = true; Canvas.CapturePointer(e.Pointer); }
             else if (_start.X < _bounds.X + 15)

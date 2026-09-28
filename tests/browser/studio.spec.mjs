@@ -101,3 +101,76 @@ test('nested For Loop opens a real editable body and executes after return', asy
   await clickCommand(page, 'up'); await expect.poll(async () => (await state(page)).depth).toBe(0); await clickCommand(page, 'run');
   await expect.poll(async () => (await state(page)).nodes.find(n => n.kind === 'indicator').number).toBe(10);
 });
+
+async function instrument(page, index, name) {
+  const r = Object.values((await state(page)).instruments)[index];
+  await page.mouse.click(r.x + r.width / 2, r.y + r.height / 2);
+  await expect.poll(async () => (await state(page)).instrument).toBe(name);
+  await page.waitForTimeout(300);
+}
+async function control(page, name) {
+  await expect.poll(async () => (await state(page)).controls?.[name]?.width ?? 0).toBeGreaterThan(0);
+  const r = (await state(page)).controls[name];
+  await page.mouse.click(r.x + r.width / 2, r.y + Math.min(18, r.height / 2));
+}
+async function typeField(page, name, text) {
+  await control(page, name); await page.keyboard.press('Control+a'); await page.keyboard.insertText(text);
+}
+
+test('typed array editor drives indexed tunnels and two independent loop outputs', async ({ page }) => {
+  await boot(page); await instrument(page, 3, 'Auto-index & Registers.vi'); await diagram(page);
+  await clickCommand(page, 'run');
+  await expect.poll(async () => (await state(page)).nodes.find(n => n.label === 'Final sum').number).toBe(15);
+  expect((await state(page)).nodes.find(n => n.label === 'Prefix sums').elements).toEqual(['1', '3', '6', '10', '15']);
+  const input = (await state(page)).nodes.find(n => n.label === 'Input array').bounds;
+  await page.mouse.dblclick(input.x + input.width / 2, input.y + input.height / 2);
+  await typeField(page, 'typed-value', '[10,20,30]'); await control(page, 'dialog-apply');
+  await expect.poll(async () => (await state(page)).dialogOpen).toBe(false);
+  await clickCommand(page, 'run');
+  await expect.poll(async () => (await state(page)).nodes.find(n => n.label === 'Final sum').number).toBe(60);
+  expect((await state(page)).nodes.find(n => n.label === 'Prefix sums').elements).toEqual(['10', '30', '60']);
+  await screenshot(page, 'typed-loop');
+  await clickCommand(page, 'undo'); await clickCommand(page, 'run');
+  await expect.poll(async () => (await state(page)).nodes.find(n => n.label === 'Final sum').number).toBe(15);
+});
+
+test('cluster values preserve U64 bits and named outputs wire independently', async ({ page }) => {
+  await boot(page); await instrument(page, 4, 'Typed Data.vi'); await diagram(page); await clickCommand(page, 'run');
+  await expect.poll(async () => (await state(page)).nodes.find(n => n.label === 'Serial number (U64)').exact).toBe('18446744073709551615');
+  let s = await state(page); const cluster = s.nodes.find(n => n.kind === 'unbundle');
+  expect(Object.keys(cluster.outputs)).toEqual(['serial', 'temperature', 'valid']);
+  const target = s.nodes.find(n => n.label === 'Temperature');
+  await page.mouse.move(cluster.outputs.serial.x, cluster.outputs.serial.y); await page.mouse.down();
+  await page.mouse.move(target.inputs.x.x, target.inputs.x.y, { steps: 12 }); await page.mouse.up();
+  await expect.poll(async () => (await state(page)).wires.find(w => w.to === target.id).output).toBe('serial');
+  await clickCommand(page, 'run'); await expect.poll(async () => (await state(page)).errors).toBe(0);
+  await clickCommand(page, 'undo'); await clickCommand(page, 'run');
+  await expect.poll(async () => (await state(page)).nodes.find(n => n.label === 'Temperature').number).toBe(23.75);
+  await clickCommand(page, 'front-panel'); await page.waitForTimeout(350); await screenshot(page, 'typed-front-panel');
+});
+
+test('Quick Drop uses keyboard search and insertion and rejects invalid typed literals', async ({ page }) => {
+  await boot(page); await diagram(page); await clickCommand(page, 'quick-drop');
+  await typeField(page, 'quick-drop-search', 'typed constant'); await page.keyboard.press('Enter');
+  await expect.poll(async () => (await state(page)).nodes.length).toBe(14);
+  await clickCommand(page, 'representation');
+  await typeField(page, 'type-expression', 'U8'); await typeField(page, 'typed-value', '999'); await control(page, 'dialog-apply');
+  expect((await state(page)).dialogOpen).toBe(true);
+  expect((await state(page)).nodes.find(n => n.kind === 'typed-constant').type).toBe('I32');
+  await typeField(page, 'typed-value', '255'); await control(page, 'dialog-apply');
+  await expect.poll(async () => (await state(page)).dialogOpen).toBe(false);
+  await clickCommand(page, 'run');
+  await expect.poll(async () => (await state(page)).nodes.find(n => n.kind === 'typed-constant').exact).toBe('255');
+});
+
+test('structure editor adds and undoes actual connector terminals', async ({ page }) => {
+  await boot(page); await instrument(page, 3, 'Auto-index & Registers.vi'); await diagram(page);
+  const loop = (await state(page)).nodes.find(n => n.kind === 'for-loop');
+  await page.mouse.click(loop.bounds.x + loop.bounds.width / 2, loop.bounds.y + loop.bounds.height / 2);
+  await clickCommand(page, 'structure'); await control(page, 'add-output-tunnels'); await control(page, 'dialog-apply');
+  await expect.poll(async () => (await state(page)).nodes.find(n => n.id === loop.id).contract.outputs).toBe(2);
+  expect((await state(page)).errors).toBeGreaterThan(0);
+  await clickCommand(page, 'undo'); await clickCommand(page, 'run');
+  await expect.poll(async () => (await state(page)).errors).toBe(0);
+  expect((await state(page)).nodes.find(n => n.id === loop.id).contract.outputs).toBe(1);
+});

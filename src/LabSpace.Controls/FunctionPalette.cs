@@ -27,9 +27,10 @@ public sealed class FunctionPalette : Grid
         {
             entries.AddRange([
                 ("Numeric", "control", "Numeric", "Numeric", "DBL"), ("Numeric", "control", "Knob", "Knob", "◉"), ("Numeric", "control", "Slider", "Slider", "↔"),
-                ("Numeric", "indicator", "Numeric", "Indicator", "123"), ("Numeric", "indicator", "Gauge", "Gauge", "∩"),
+                ("Numeric", "indicator", "Thermometer", "Thermometer", "°C"), ("Numeric", "indicator", "Tank", "Tank", "▤"), ("Numeric", "indicator", "Numeric", "Indicator", "123"), ("Numeric", "indicator", "Gauge", "Gauge", "∩"),
                 ("Boolean", "bool-control", "Switch", "Push button", "T/F"), ("Boolean", "bool-indicator", "LED", "Round LED", "●"),
                 ("Graphs", "graph", "Graph", "Waveform graph", "~"), ("Graphs", "chart", "Chart", "Waveform chart", "~+"),
+                ("Typed Data", "typed-control", "Numeric", "Typed control", "I32"), ("Typed Data", "typed-indicator", "Numeric", "Typed indicator", "I32"),
                 ("String & Array", "string-control", "String", "String control", "abc"), ("String & Array", "string-indicator", "String", "String indicator", "abc"), ("String & Array", "array-indicator", "Array", "Array", "[ ]")
             ]);
         }

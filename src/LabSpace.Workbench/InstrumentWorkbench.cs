@@ -11,7 +11,7 @@ namespace LabSpace.Workbench;
 public enum StudioView { FrontPanel, BlockDiagram, Split }
 
 /// <summary>The complete studio is a reusable Uno control. Hosts provide only storage and font assets.</summary>
-public sealed class InstrumentWorkbench : UserControl, IDisposable
+public sealed partial class InstrumentWorkbench : UserControl, IDisposable
 {
     private readonly IProjectStorage _storage;
     private readonly LabFonts _fonts;
@@ -55,7 +55,8 @@ public sealed class InstrumentWorkbench : UserControl, IDisposable
         FontFamily = LabTheme.Font; FontSize = 12; Background = LabTheme.Brush("#EFEFEF");
         FrontPanel = new(session, fonts); BlockDiagram = new(session, fonts); Inspector = new(session);
         FrontPanel.EditRequested += EditNode; BlockDiagram.EditRequested += EditNode;
-        BlockDiagram.HoverChanged += SetHelp; BlockDiagram.PaletteRequested += _ => { ShowProperties(false); Palette.FocusSearch(); };
+        BlockDiagram.HoverChanged += SetHelp; BlockDiagram.PaletteRequested += OpenDiagramContext;
+        Inspector.TypeRequested += n => Forget(EditRepresentationAsync(n)); Inspector.StructureRequested += n => Forget(EditStructureAsync(n));
         Palette.AddRequested += AddFromPalette;
         _front.PaneContent = FrontPanel; _diagram.PaneContent = BlockDiagram;
         _front.Commands.Children.Add(Command("fit-panel", "Fit panel", FrontPanel.Fit, "fit", false));
@@ -73,11 +74,14 @@ public sealed class InstrumentWorkbench : UserControl, IDisposable
         tools.Children.Add(Command("edit-panel", "Edit front panel", () => { Session.PanelEditMode = !Session.PanelEditMode; Session.Notify(SessionChange.View | SessionChange.Execution); }, "edit"));
         tools.Children.Add(Command("layout", "Clean up diagram", () => { Safe(Session.AutoLayout); SetView(StudioView.BlockDiagram); BlockDiagram.Fit(); }, "layout"));
         tools.Children.Add(Command("fit", "Fit to window", Fit, "fit")); tools.Children.Add(LabTheme.Separator());
-        var fontCaption = LabTheme.Text("13 pt Application Font", 12); fontCaption.Margin = new(8, 0, 8, 0); tools.Children.Add(fontCaption);
+        var fontCaption = LabTheme.Text("15 pt Application Font", 12); fontCaption.Margin = new(8, 0, 8, 0); tools.Children.Add(fontCaption);
+        tools.Children.Add(Command("quick-drop", "Quick Drop", () => Forget(QuickDropAsync()), "search"));
+        tools.Children.Add(Command("representation", "Representation", () => { if (Session.SelectedNode is { } n) Forget(EditRepresentationAsync(n)); }, "type"));
+        tools.Children.Add(Command("structure", "Configure tunnels and shift registers", () => { if (Session.SelectedNode is { Contract: not null } n) Forget(EditStructureAsync(n)); }, "structure"));
         tools.Children.Add(Command("errors", "Error list", ToggleErrors, "!")); tools.Children.Add(Command("help", "Help", () => Forget(ShowHelpAsync()), "help"));
         var toolbarScroll = new ScrollViewer { Content = tools, HorizontalScrollBarVisibility = ScrollBarVisibility.Hidden, VerticalScrollBarVisibility = ScrollBarVisibility.Disabled }; Grid.SetRow(toolbarScroll, 1); root.Children.Add(toolbarScroll);
         var tabHost = new ScrollViewer { Content = _documentTabs, HorizontalScrollBarVisibility = ScrollBarVisibility.Hidden, VerticalScrollBarVisibility = ScrollBarVisibility.Disabled, Background = LabTheme.Brush("#DADADA") }; Grid.SetRow(tabHost, 2); root.Children.Add(tabHost);
-        _middle.ColumnDefinitions.Add(new() { Width = new(185) }); _middle.ColumnDefinitions.Add(new() { Width = new(1, GridUnitType.Star) }); _middle.ColumnDefinitions.Add(new() { Width = new(245) });
+        _middle.ColumnDefinitions.Add(new() { Width = new(185) }); _middle.ColumnDefinitions.Add(new() { Width = new(4) }); _middle.ColumnDefinitions.Add(new() { Width = new(1, GridUnitType.Star) }); _middle.ColumnDefinitions.Add(new() { Width = new(4) }); _middle.ColumnDefinitions.Add(new() { Width = new(245) });
         Grid.SetRow(_middle, 3); root.Children.Add(_middle);
         _left.PaneContent = new ScrollViewer { Content = _projectItems, HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled }; _left.BorderBrush = LabTheme.Brush("#9B9B9B"); _left.BorderThickness = new Thickness(0, 0, 1, 0); _middle.Children.Add(_left);
         var center = new Grid(); center.RowDefinitions.Add(new() { Height = new(30) }); center.RowDefinitions.Add(new() { Height = new(1, GridUnitType.Star) });
@@ -87,16 +91,20 @@ public sealed class InstrumentWorkbench : UserControl, IDisposable
         _viewTabs.Children.Add(Command("split", "Split", () => SetView(StudioView.Split), null, true, true));
         _viewTabs.Children.Add(Command("up", "Parent diagram", () => { Session.Leave(); BlockDiagram.Fit(); }, "←", true, true));
         center.Children.Add(_viewTabs); _editors.RowDefinitions.Add(new() { Height = new(1, GridUnitType.Star) }); _editors.RowDefinitions.Add(new() { Height = new(1, GridUnitType.Star) });
-        _editors.Children.Add(_front); _editors.Children.Add(_diagram); Grid.SetRow(_editors, 1); center.Children.Add(_editors); Grid.SetColumn(center, 1); _middle.Children.Add(center);
+        _editors.Children.Add(_front); _editors.Children.Add(_diagram); Grid.SetRow(_editors, 1); center.Children.Add(_editors); Grid.SetColumn(center, 2); _middle.Children.Add(center);
         var rightBody = new Grid(); rightBody.RowDefinitions.Add(new() { Height = new(29) }); rightBody.RowDefinitions.Add(new() { Height = new(1, GridUnitType.Star) });
         _rightTabs.Children.Add(new LabButton("Palette", () => ShowProperties(false))); _rightTabs.Children.Add(new LabButton("Properties", () => ShowProperties(true))); rightBody.Children.Add(_rightTabs);
         _rightContent.Children.Add(Palette); _rightContent.Children.Add(Inspector); Grid.SetRow(_rightContent, 1); rightBody.Children.Add(_rightContent); _right.PaneContent = rightBody;
         var rightColumn = new Grid(); rightColumn.RowDefinitions.Add(new() { Height = new(1, GridUnitType.Star) }); rightColumn.RowDefinitions.Add(new() { Height = new(184) }); rightColumn.Children.Add(_right);
         _help.TextWrapping = TextWrapping.Wrap; _help.TextTrimming = TextTrimming.None; _help.Margin = new(10); _help.VerticalAlignment = VerticalAlignment.Top;
-        _helpPane.PaneContent = new ScrollViewer { Content = _help }; Grid.SetRow(_helpPane, 1); rightColumn.Children.Add(_helpPane); rightColumn.BorderBrush = LabTheme.Brush("#9B9B9B"); rightColumn.BorderThickness = new Thickness(1, 0, 0, 0); Grid.SetColumn(rightColumn, 2); _middle.Children.Add(rightColumn);
+        _helpPane.PaneContent = new ScrollViewer { Content = _help }; Grid.SetRow(_helpPane, 1); rightColumn.Children.Add(_helpPane); rightColumn.BorderBrush = LabTheme.Brush("#9B9B9B"); rightColumn.BorderThickness = new Thickness(1, 0, 0, 0); Grid.SetColumn(rightColumn, 4); _middle.Children.Add(rightColumn);
         _errorsHost.Child = new ScrollViewer { Content = _errors, MaxHeight = 155 }; _errorsHost.Background = LabTheme.Brush("#FFF9EF"); _errorsHost.Visibility = Visibility.Collapsed; Grid.SetRow(_errorsHost, 4); root.Children.Add(_errorsHost);
         var statusBar = new Grid { Background = LabTheme.Brush("#E5E5E5"), BorderBrush = LabTheme.Brush("#A5A5A5"), BorderThickness = new Thickness(0, 1, 0, 0) }; statusBar.ColumnDefinitions.Add(new() { Width = new(1, GridUnitType.Star) }); statusBar.ColumnDefinitions.Add(new() { Width = new(315) }); _status.Margin = new(8, 0, 8, 0); _metrics.Margin = new(8, 0, 8, 0); statusBar.Children.Add(_status); Grid.SetColumn(_metrics, 1); statusBar.Children.Add(_metrics); Grid.SetRow(statusBar, 5); root.Children.Add(statusBar);
-        SizeChanged += (_, _) => { _middle.ColumnDefinitions[0].Width = ActualWidth < 1100 ? new(0) : new(185); _middle.ColumnDefinitions[2].Width = ActualWidth < 760 ? new(190) : new(245); _title.Visibility = ActualWidth < 900 ? Visibility.Collapsed : Visibility.Visible; };
+        SizeChanged += (_, _) => { _middle.ColumnDefinitions[0].Width = ActualWidth < 1100 ? new(0) : new(185); _middle.ColumnDefinitions[4].Width = ActualWidth < 760 ? new(190) : new(245); _title.Visibility = ActualWidth < 900 ? Visibility.Collapsed : Visibility.Visible; };
+        var leftSplitter = new LabSplitter(); Grid.SetColumn(leftSplitter, 1); _middle.Children.Add(leftSplitter);
+        leftSplitter.Delta += delta => _middle.ColumnDefinitions[0].Width = new(Math.Clamp(_middle.ColumnDefinitions[0].ActualWidth + delta, 120, Math.Max(120, ActualWidth * .35)));
+        var rightSplitter = new LabSplitter(); Grid.SetColumn(rightSplitter, 3); _middle.Children.Add(rightSplitter);
+        rightSplitter.Delta += delta => _middle.ColumnDefinitions[4].Width = new(Math.Clamp(_middle.ColumnDefinitions[4].ActualWidth - delta, 180, Math.Max(180, ActualWidth * .45)));
         AddAccelerators(); Session.Changed += OnChanged;
         _executionTimer.Tick += (_, _) => { if (!_dialogOpen) Session.Tick(); }; _executionTimer.Start();
         _recoveryTimer.Tick += (_, _) => Forget(SaveRecoveryAsync()); _recoveryTimer.Start();
@@ -129,7 +137,7 @@ public sealed class InstrumentWorkbench : UserControl, IDisposable
         Menu("View", ("Front Panel", () => SetView(StudioView.FrontPanel)), ("Block Diagram\tCtrl+E", () => SetView(StudioView.BlockDiagram)), ("Split views", () => SetView(StudioView.Split)), ("Fit to window", Fit), ("100% zoom", () => { FrontPanel.SetZoom(1); BlockDiagram.SetZoom(1); }), ("Properties", () => ShowProperties(true)), ("Error list", ToggleErrors));
         Menu("Project", ("New virtual instrument", Session.NewInstrument), ("VI properties…", () => Forget(EditInstrumentAsync())), ("Parent diagram", () => Session.Leave()));
         Menu("Operate", ("Run\tCtrl+R", () => Session.Run()), ("Run continuously\tF6", () => Session.Run(true)), ("Abort execution", Session.Abort), ("Pause / resume", Session.Pause), ("Single step\tF10", Session.Step), ("Set / remove breakpoint", Session.ToggleBreakpoint));
-        Menu("Tools", ("Clean up diagram", () => { Session.AutoLayout(); BlockDiagram.Fit(); }), ("Attach / remove wire probe", Session.ToggleProbe), ("Toggle panel editing", () => { Session.PanelEditMode = !Session.PanelEditMode; Session.Notify(); }), ("Validate diagram", () => { Session.Validate(); ToggleErrors(); }));
+        Menu("Tools", ("Quick Drop…\tCtrl+Space", () => Forget(QuickDropAsync())), ("Remove broken wires\tCtrl+B", Session.RemoveBrokenWires), ("Configure structure…", () => { if (Session.SelectedNode is { Contract: not null } n) Forget(EditStructureAsync(n)); }), ("Clean up diagram", () => { Session.AutoLayout(); BlockDiagram.Fit(); }), ("Attach / remove wire probe", Session.ToggleProbe), ("Toggle panel editing", () => { Session.PanelEditMode = !Session.PanelEditMode; Session.Notify(); }), ("Validate diagram", () => { Session.Validate(); ToggleErrors(); }));
         Menu("Window", ("Front Panel / Block Diagram", ToggleView), ("Split horizontally", () => SetView(StudioView.Split)), ("Fit all content", Fit));
         Menu("Help", ("LabSpace user guide", () => Forget(ShowHelpAsync())), ("Compatibility and limits", () => Forget(ShowHelpAsync(true))));
         return bar;
@@ -142,6 +150,9 @@ public sealed class InstrumentWorkbench : UserControl, IDisposable
             accelerator.Invoked += (_, e) => { if (_dialogOpen) return; Safe(action); e.Handled = true; }; KeyboardAccelerators.Add(accelerator);
         }
         Key(VirtualKey.E, VirtualKeyModifiers.Control, ToggleView); Key(VirtualKey.R, VirtualKeyModifiers.Control, () => Session.Run()); Key(VirtualKey.S, VirtualKeyModifiers.Control, () => Forget(SaveAsync())); Key(VirtualKey.O, VirtualKeyModifiers.Control, () => Forget(OpenAsync())); Key(VirtualKey.N, VirtualKeyModifiers.Control, Session.NewInstrument);
+        Key(VirtualKey.Space, VirtualKeyModifiers.Control, () => Forget(QuickDropAsync()));
+        Key(VirtualKey.B, VirtualKeyModifiers.Control, Session.RemoveBrokenWires);
+        Key(VirtualKey.H, VirtualKeyModifiers.Control, () => _helpPane.Visibility = _helpPane.Visibility == Visibility.Visible ? Visibility.Collapsed : Visibility.Visible);
         Key(VirtualKey.F6, VirtualKeyModifiers.None, () => Session.Run(true)); Key(VirtualKey.F10, VirtualKeyModifiers.None, Session.Step);
         // Editing accelerators stay on canvas surfaces so text fields retain native undo and clipboard behavior.
         foreach (var canvas in new CanvasViewport[] { FrontPanel, BlockDiagram })
@@ -178,6 +189,9 @@ public sealed class InstrumentWorkbench : UserControl, IDisposable
         _title.Text = Session.Instrument.Name + (Session.Dirty ? " *" : "") + " — LabSpace";
         _commands["undo"].IsEnabled = Session.CanUndo; _commands["redo"].IsEnabled = Session.CanRedo; _commands["pause"].SetActive(Session.IsPaused); _commands["continuous"].SetActive(Session.IsRunning); _commands["highlight"].SetActive(Session.Highlight); _commands["edit-panel"].SetActive(Session.PanelEditMode); _commands["up"].Visibility = Session.Path.Count == 0 ? Visibility.Collapsed : Visibility.Visible;
         _commands["errors"].SetActive(Session.Diagnostics.Count > 0);
+        _commands["representation"].IsEnabled = Session.SelectedNode is not null;
+        _commands["structure"].IsEnabled = Session.SelectedNode?.Contract is not null;
+        if (_commands["run"].Content is VectorIcon run) { run.Icon = Session.Diagnostics.Count > 0 ? "broken-run" : "run"; run.Invalidate(); }
         if ((change & (SessionChange.Document | SessionChange.Navigation)) != 0) { RebuildProject(); if (_errorsHost.Visibility == Visibility.Visible) BuildErrors(); }
         if (Session.Path.Count > 0 && View == StudioView.FrontPanel) SetView(StudioView.BlockDiagram);
         _diagram.Caption.Text = Session.Path.Count == 0 ? Session.Instrument.Name + " — Block Diagram" : "Nested diagram · " + Session.Path.Count + " level(s)";
@@ -209,8 +223,8 @@ public sealed class InstrumentWorkbench : UserControl, IDisposable
     {
         var id = node?.Id; if (_hoverId == id && node is not null) return; _hoverId = id;
         if (node is null) { _help.Text = "LABSPACE\n\nFront Panel: operate or arrange controls.\nBlock Diagram: connect output terminals to matching inputs.\n\nCtrl+E switches views. Hover over a function for help."; return; }
-        if (!NodeCatalog.TryGet(node.Kind, out var def)) { _help.Text = "Unknown function: " + node.Kind; return; }
-        _help.Text = def.Title.ToUpperInvariant() + "\n\n" + def.Description + "\n\n" + string.Join("\n", def.Inputs.Select(p => $"{p.Name}: {p.Kind}" + (p.Required ? " (required)" : " (optional)"))) + (def.HasOutput ? "\noutput: " + def.Output : "");
+        var def = NodeCatalog.Describe(node);
+        _help.Text = def.Title.ToUpperInvariant() + "\n\n" + def.Description + "\n\n" + string.Join("\n", def.Inputs.Select(p => $"{p.Name}: {TypeSyntax.Format(p.DataType)}" + (p.Required ? " (required)" : " (optional)"))) + "\n" + string.Join("\n", def.OutputPorts.Select(p => "→ " + p.Name + ": " + TypeSyntax.Format(p.DataType)));
     }
     private void BuildErrors()
     {
@@ -224,10 +238,11 @@ public sealed class InstrumentWorkbench : UserControl, IDisposable
     private void ToggleErrors() { BuildErrors(); _errorsHost.Visibility = _errorsHost.Visibility == Visibility.Visible ? Visibility.Collapsed : Visibility.Visible; }
     private async void EditNode(Node node)
     {
+        if (node.Type is not null || node.Kind is "typed-constant" or "typed-control") { await EditRepresentationAsync(node); return; }
         if (_dialogOpen) return; _dialogOpen = true;
         try
         {
-            var kind = NodeCatalog.Get(node.Kind); var editable = kind.IsControl || node.Kind is "constant" or "bool" or "string" or "array" or "input";
+            var kind = NodeCatalog.Describe(node); var editable = kind.IsControl || node.Kind is "constant" or "bool" or "string" or "array" or "input";
             if (!editable) { ShowProperties(true); return; }
             var isText = node.Kind is "string" or "string-control" or "array" or "input";
             var box = new LabTextBox(isText ? node.Text : node.Value.ToString("G17", CultureInfo.InvariantCulture), node.Label) { MinWidth = 290 };
@@ -302,7 +317,7 @@ public sealed class InstrumentWorkbench : UserControl, IDisposable
         if (element.Visibility != Visibility.Visible || element.ActualWidth <= 0 || element.ActualHeight <= 0) return new();
         try { var origin = element.TransformToVisual(this).TransformPoint(new(0, 0)); return new(origin.X, origin.Y, element.ActualWidth, element.ActualHeight); } catch { return new(); }
     }
-    public void Dispose()
+    public new void Dispose()
     {
         if (_disposed) return; _disposed = true; _executionTimer.Stop(); _recoveryTimer.Stop(); Session.Abort(); Session.Changed -= OnChanged; FrontPanel.Dispose(); BlockDiagram.Dispose(); Inspector.Dispose();
     }

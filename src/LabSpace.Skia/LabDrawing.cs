@@ -17,7 +17,18 @@ public sealed class LabDrawing(LabFonts fonts) : IDisposable
     private readonly SKPaint _stroke = new() { IsAntialias = true, Style = SKPaintStyle.Stroke, StrokeCap = SKStrokeCap.Round, StrokeJoin = SKStrokeJoin.Round };
     private readonly Dictionary<float, SKFont> _fonts = [];
     public static SKColor Color(string hex) => SKColor.Parse(hex);
-    public static SKColor WireColor(ValueKind kind) => kind switch { ValueKind.Number => Color("#DE741B"), ValueKind.Boolean => Color("#288624"), ValueKind.String => Color("#CA257E"), ValueKind.Array => Color("#C9680B"), _ => Color("#875332") };
+    public static SKColor WireColor(ValueKind kind) => WireColor(LabType.Scalar(kind));
+    public static SKColor WireColor(LabType type) => type.Kind == ValueKind.Array ? WireColor(type.Element!) : type.IsInteger || type.Kind == ValueKind.Enum ? Color("#174BB5") : type.Kind switch
+    { ValueKind.Number or ValueKind.Single or ValueKind.Complex => Color("#ED7900"), ValueKind.Boolean => Color("#008000"), ValueKind.String => Color("#D52D9A"), ValueKind.Variant => Color("#7B396E"), _ => Color("#875332") };
+    public static string TypeGlyph(LabType type) => type.Kind switch
+    { ValueKind.Number => "DBL", ValueKind.Single => "SGL", ValueKind.Complex => "CDB", ValueKind.Boolean => "TF", ValueKind.String => "abc", ValueKind.Array => "[ ]", ValueKind.Cluster => "{ }", ValueKind.Error => "err", ValueKind.Enum => "enum", ValueKind.Variant => "VAR", ValueKind.Waveform => "~", _ => (type.IsUnsigned ? "U" : "I") + type.BitWidth };
+    public void DashedPath(SKCanvas c, SKPath path, SKColor color, float width = 1)
+    {
+        using var dash = SKPathEffect.CreateDash(new float[] { 5, 4 }, 0);
+        _stroke.PathEffect = dash; Path(c, path, color, width); _stroke.PathEffect = null;
+    }
+    public void TextRight(SKCanvas c, string text, float right, float baseline, float size = 13, string color = "#202020")
+    { var font = Font(size); Text(c, text, right - font.MeasureText(text), baseline, size, color); }
     public SKFont Font(float size) { if (!_fonts.TryGetValue(size, out var font)) _fonts[size] = font = new(fonts.Regular, size) { Edging = SKFontEdging.SubpixelAntialias, Subpixel = true }; return font; }
     public void Rect(SKCanvas c, SKRect rect, SKColor color) { _fill.Color = color; c.DrawRect(rect, _fill); }
     public void Rect(SKCanvas c, float x, float y, float width, float height, string color) => Rect(c, new(x, y, x + width, y + height), Color(color));

@@ -11,6 +11,10 @@ public static class IconPainter
         switch (name)
         {
             case "run": using (var p = new SKPath()) { p.MoveTo(4, 5); p.LineTo(11, 5); p.LineTo(11, 2); p.LineTo(21, 12); p.LineTo(11, 22); p.LineTo(11, 18); p.LineTo(4, 18); p.Close(); d.Path(c, p, SKColors.White, fill: true); d.Path(c, p, ink, 1.4f); } break;
+            case "broken-run": Draw(c, "run", new(0, 0, 24, 24), d); d.Line(c, 8, 2, 14, 9, SKColors.White, 4); d.Line(c, 14, 9, 8, 16, SKColors.White, 4); d.Line(c, 8, 16, 14, 23, SKColors.White, 4); break;
+            case "search": d.Circle(c, 9, 9, 6, ink, false); d.Line(c, 14, 14, 22, 22, ink, 2); break;
+            case "type": d.Text(c, "I32", 12, 17, 12, "#174BB5", true); break;
+            case "structure": d.Border(c, new(3, 3, 21, 21), ink, 2); d.Rect(c, 1, 7, 5, 5, "#ED7900"); d.Rect(c, 18, 14, 5, 5, "#ED7900"); break;
             case "continuous":
                 using (var p = new SKPath()) { p.AddArc(new(3, 4, 20, 21), 205, 265); d.Path(c, p, ink, 1.6f); } d.Line(c, 5, 4, 5, 10, ink, 1.6f); d.Line(c, 5, 4, 11, 5, ink, 1.6f); break;
             case "stop": using (var p = new SKPath()) { p.MoveTo(7, 3); p.LineTo(17, 3); p.LineTo(22, 8); p.LineTo(22, 17); p.LineTo(17, 22); p.LineTo(7, 22); p.LineTo(2, 17); p.LineTo(2, 8); p.Close(); d.Path(c, p, LabDrawing.Color("#BF423B"), fill: true); d.Path(c, p, ink); } break;

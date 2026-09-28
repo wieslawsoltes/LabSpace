@@ -41,6 +41,7 @@ public sealed class Node
     public string Text { get; set; } = "";
     public Dictionary<string, double> Parameters { get; set; } = [];
     public bool Breakpoint { get; set; }
+    public bool PreviewAlternative { get; set; }
     public LabType? Type { get; set; }
     public StructureContract? Contract { get; set; }
     public Diagram? Body { get; set; }
