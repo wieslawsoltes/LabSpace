@@ -12,42 +12,22 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
+          ref: feat/typed-dataflow-compatibility
           fetch-depth: 0
       - uses: actions/setup-dotnet@v4
         with:
           global-json-file: global.json
-      - name: Restore verified source patch
-        env:
-          GH_TOKEN: ${{ github.token }}
+      - name: Correct explicit params field construction
         run: |
           python3 - <<'PY'
-          import base64,bz2,hashlib,json,subprocess
-          parts=[('69fef659a09f61d27a329d1900d7e00a03220eda','bdbfeb840157d1ecfc3411f135cb3de5078667f2'),('b2d88f499760e12c1ecbc08de36703762285753d','b2d88f499760e12c1ecbc08de36703762285753d'),('482ec6584dc8c3392e45f980d4423585b270eac7','482ec6584dc8c3392e45f980d4423585b270eac7')]
-          def blob_sha(data): return hashlib.sha1(b'blob '+str(len(data)).encode()+b'\0'+data).hexdigest()
-          chunks=[]
-          for actual,expected in parts:
-              obj=json.loads(subprocess.check_output(['gh','api','repos/wieslawsoltes/LabSpace/git/blobs/'+actual]))
-              data=base64.b64decode(obj['content'])
-              if actual!=expected:
-                  encoded=base64.b64encode(data).decode()
-                  end=4252
-                  while end<len(encoded) and encoded[end]=='q': end+=1
-                  encoded=encoded[:4252]+'q'*10+encoded[end:]
-                  data=base64.b64decode(encoded[:11999]+'j')
-              assert blob_sha(data)==expected, (actual,blob_sha(data),expected,len(data))
-              chunks.append(data)
-          patch=bz2.decompress(b''.join(chunks))
-          assert hashlib.sha256(patch).hexdigest()=='eeee54d8de167f69b80346efdaf62fbf177d8c2d7214c4a53cc67d9565358049'
-          open('/tmp/compatibility.patch','wb').write(patch)
+          from pathlib import Path
+          p=Path('tests/LabSpace.Tests/TypedExecutionTests.cs')
+          p.write_text(p.read_text().replace('LabType.Cluster(new(', 'LabType.Cluster(new TypeField('))
           PY
-          git checkout -b feat/typed-dataflow-compatibility 598b41bf871e85e2fcb4cb42f6e2cf9f13e4c217
-          git apply --check /tmp/compatibility.patch
-          git apply /tmp/compatibility.patch
           git config user.name 'Wiesław Šoltés'
           git config user.email 'wieslawsoltes@users.noreply.github.com'
-          git add src tests
-          git commit -m 'feat: add structural wire types, named outputs, indexed tunnels and typed shift registers'
-          git push origin HEAD:refs/heads/feat/typed-dataflow-compatibility
+          git add tests
+          if ! git diff --cached --quiet; then git commit -m 'test: disambiguate params type field construction'; git push; fi
       - name: Test executable semantics
         run: dotnet test tests/LabSpace.Tests -c Release --logger 'trx;LogFileName=typed.trx' --results-directory artifacts/tests
       - name: Build desktop integration
