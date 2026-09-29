@@ -19,6 +19,11 @@ jobs:
       contents: write
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Verify storage transaction and picker lifecycle
+        run: node --test tests/storage/*.test.mjs
       - uses: actions/setup-dotnet@v4
         with:
           global-json-file: global.json
