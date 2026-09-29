@@ -24,6 +24,8 @@ internal sealed class BrowserDiagnostics : IDisposable
             json.WriteString("overlay", _workbench.OverlayMode); json.WriteString("placement", _workbench.BlockDiagram.PlacementKind ?? _workbench.FrontPanel.PlacementKind);
             json.WriteNumber("debugDepth", session.DebugFrame?.Path.Count(c => c == '/') ?? 0);
             json.WriteNumber("functions", NodeCatalog.All.Count);
+            json.WriteString("currentFrame", session.Path.LastOrDefault()?.FrameId);
+            json.WriteString("currentFrameLabel", session.CurrentOwner?.Frames.FirstOrDefault(f => f.Id == session.Path.LastOrDefault()?.FrameId)?.Selector);
             json.WriteStartObject("overlayFields"); foreach (var (name, element) in _workbench.OverlayFields) Bounds(json, name, _workbench.ElementBounds(element)); json.WriteEndObject();
             json.WriteStartObject("commands"); foreach (var (name, element) in _workbench.Commands) Bounds(json, name, _workbench.ElementBounds(element)); json.WriteEndObject();
             json.WriteStartObject("palette"); foreach (var (name, element) in _workbench.Palette.Entries) Bounds(json, name, _workbench.ElementBounds(element)); json.WriteEndObject();
@@ -34,7 +36,10 @@ internal sealed class BrowserDiagnostics : IDisposable
             foreach (var node in session.Diagram.Nodes)
             {
                 var rect = DiagramGeometry.Bounds(node); var p = surface.ToScreen(new(node.X, node.Y)); var output = DiagramGeometry.Output(node); var outputPoint = surface.ToScreen(new(output.X, output.Y));
-                json.WriteStartObject(); json.WriteString("id", node.Id); json.WriteString("kind", node.Kind); json.WriteString("label", node.Label); json.WriteNumber("value", node.Value); json.WriteNumber("modelX", node.X); json.WriteNumber("modelY", node.Y); json.WriteBoolean("selected", session.Selection.Contains(node.Id));
+                json.WriteStartObject(); json.WriteString("id", node.Id); json.WriteString("kind", node.Kind); json.WriteString("label", node.Label); json.WriteNumber("value", node.Value); json.WriteString("text", node.Text);
+                json.WriteNumber("frameCount", node.Frames.Count); json.WriteNumber("previewIndex", session.PreviewIndex(node));
+                json.WriteString("selectorType", node.Contract?.SelectorType.ToString());
+                json.WriteStartArray("frameLabels"); foreach (var f in node.Frames) json.WriteStringValue(f.Selector); json.WriteEndArray(); json.WriteNumber("modelX", node.X); json.WriteNumber("modelY", node.Y); json.WriteBoolean("selected", session.Selection.Contains(node.Id));
                 Bounds(json, "bounds", new(origin.X + p.X, origin.Y + p.Y, rect.Width * surface.Zoom, rect.Height * surface.Zoom)); Point(json, "output", origin.X + outputPoint.X, origin.Y + outputPoint.Y);
                 json.WriteStartObject("inputs"); if (NodeCatalog.TryGet(node.Kind, out _)) for (var i = 0; i < NodeCatalog.Resolve(node).Inputs.Length; i++) { var q = DiagramGeometry.Input(node, i); var screen = surface.ToScreen(new(q.X, q.Y)); Point(json, NodeCatalog.Resolve(node).Inputs[i].Name, origin.X + screen.X, origin.Y + screen.Y); } json.WriteEndObject();
                 var definition = NodeCatalog.Resolve(node);

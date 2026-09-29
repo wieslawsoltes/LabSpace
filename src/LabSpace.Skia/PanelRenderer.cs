@@ -42,6 +42,15 @@ public sealed class PanelRenderer : IDisposable
                     var source = session.Instrument.Diagram.Wires.FirstOrDefault(w => w.To == node.Id)?.From;
                     var spectrum = source is not null && nodes.TryGetValue(source, out var sourceNode) && sourceNode.Kind == "fft";
                     _plots.Draw(c, body, output, history, spectrum, Cursors.TryGetValue(item.Id, out var cursor) ? cursor : null); break;
+                case "Complex":
+                    _d.Bevel(c, body, "#DDDDDD", true); c.Save(); c.ClipRect(body);
+                    _d.Text(c, (output ?? Value.Complex(0, 0)).ToString(), body.Left + 8, body.Top + 28, 17); c.Restore(); break;
+                case "Error":
+                    _d.Bevel(c, body, "#CDCDCD"); var error = output?.Error ?? new(false, 0, "");
+                    _d.Circle(c, body.Left + 14, body.Top + 16, 6, LabDrawing.Color(error.Status ? "#D0392E" : "#398834"));
+                    _d.Text(c, error.Status ? "status: TRUE" : "status: FALSE", body.Left + 28, body.Top + 20, 11);
+                    _d.Text(c, "code: " + error.Code, body.Left + 8, body.Top + 38, 12);
+                    c.Save(); c.ClipRect(body); _d.Text(c, "source: " + error.Source, body.Left + 8, body.Top + 56, 11); c.Restore(); break;
                 case "Knob": DrawKnob(c, body, item, value); break;
                 case "Gauge": DrawGauge(c, body, item, value); break;
                 case "Slider": DrawSlider(c, body, item, value); break;

@@ -17,7 +17,7 @@ public sealed class LabDrawing(LabFonts fonts) : IDisposable
     private readonly SKPaint _stroke = new() { IsAntialias = true, Style = SKPaintStyle.Stroke, StrokeCap = SKStrokeCap.Round, StrokeJoin = SKStrokeJoin.Round };
     private readonly Dictionary<float, SKFont> _fonts = [];
     public static SKColor Color(string hex) => SKColor.Parse(hex);
-    public static SKColor WireColor(ValueKind kind) => kind switch { ValueKind.Number => Color("#DE741B"), ValueKind.Boolean => Color("#288624"), ValueKind.String => Color("#CA257E"), ValueKind.Array => Color("#C9680B"), _ => Color("#875332") };
+    public static SKColor WireColor(ValueKind kind) => kind switch { ValueKind.Number => Color("#DE741B"), ValueKind.Boolean => Color("#288624"), ValueKind.String => Color("#CA257E"), ValueKind.Array => Color("#C9680B"), ValueKind.Error => Color("#9C8D21"), ValueKind.Complex => Color("#D66C20"), _ => Color("#875332") };
     public SKFont Font(float size) { if (!_fonts.TryGetValue(size, out var font)) _fonts[size] = font = new(fonts.Regular, size) { Edging = SKFontEdging.SubpixelAntialias, Subpixel = true }; return font; }
     public void Rect(SKCanvas c, SKRect rect, SKColor color) { _fill.Color = color; c.DrawRect(rect, _fill); }
     public void Rect(SKCanvas c, float x, float y, float width, float height, string color) => Rect(c, new(x, y, x + width, y + height), Color(color));

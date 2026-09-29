@@ -8,6 +8,7 @@ public sealed class PropertyInspector : ScrollViewer, IDisposable
 {
     private readonly InstrumentSession _session;
     public event Action<Node>? StructureRequested;
+    public event Action<Node>? FormulaRequested;
     private readonly StackPanel _fields = new() { Padding = new Thickness(10), Spacing = 7 };
     public PropertyInspector(InstrumentSession session)
     {
@@ -41,8 +42,8 @@ public sealed class PropertyInspector : ScrollViewer, IDisposable
         }
         var id = node.Id; var definition = NodeCatalog.Resolve(node); _fields.Children.Add(LabTheme.Text(definition.Title, 16));
         Field("Label", node.Label, text => _session.Edit(() => _session.Find(id)!.Label = text, false));
-        if (node.Kind is "constant" or "control" or "bool" or "bool-control" or "feedback") Field("Value", node.Value.ToString("G17", CultureInfo.InvariantCulture), text => _session.SetValue(id, Number(text)));
-        if (node.Kind is "string" or "string-control" or "array" or "input" or "output" or "simulate") Field(node.Kind == "simulate" ? "Waveform (Sine / Square / Triangle)" : "Text", node.Text, text => _session.SetText(id, text));
+        if (node.Kind is "constant" or "control" or "bool" or "bool-control" or "feedback" or "complex-constant" or "error-constant") Field("Value", node.Value.ToString("G17", CultureInfo.InvariantCulture), text => _session.SetValue(id, Number(text)));
+        if (node.Kind is "string" or "string-control" or "array" or "input" or "output" or "simulate" or "error-constant" or "waveform-constant") Field(node.Kind == "simulate" ? "Waveform (Sine / Square / Triangle)" : "Text", node.Text, text => _session.SetText(id, text));
         if (node.Kind is "input" or "output")
         {
             var type = new ComboBox { ItemsSource = Enum.GetNames<ValueKind>(), SelectedItem = node.DataType.ToString(), FontSize = 12, MinHeight = 28 };
@@ -60,16 +61,22 @@ public sealed class PropertyInspector : ScrollViewer, IDisposable
         }
         if (definition.IsStructure)
         {
-            _fields.Children.Add(new LabButton("Tunnels and shift registers…", () => StructureRequested?.Invoke(node), flat: false));
-            _fields.Children.Add(new LabButton("Edit " + (node.Kind == "case" ? "TRUE branch" : "body"), () => _session.Enter(id), flat: false));
-            if (node.Kind == "case") _fields.Children.Add(new LabButton("Edit FALSE branch", () => _session.Enter(id, true), flat: false));
+            _fields.Children.Add(new LabButton(node.Kind is "case" or "sequence" ? "Manage frames and terminals…" : "Tunnels and shift registers…", () => StructureRequested?.Invoke(node), flat: false));
+            if (node.Frames.Count > 0)
+                for (var i = 0; i < node.Frames.Count; i++) { var index = i; _fields.Children.Add(new LabButton("Edit " + i + ": " + node.Frames[i].Selector, () => _session.EnterFrame(id, index), flat: false)); }
+            else
+            {
+                _fields.Children.Add(new LabButton("Edit " + (node.Kind == "case" ? "TRUE branch" : "body"), () => _session.Enter(id), flat: false));
+                if (node.Kind == "case") _fields.Children.Add(new LabButton("Edit FALSE branch", () => _session.Enter(id, true), flat: false));
+            }
         }
+        if (node.Kind == "formula") _fields.Children.Add(new LabButton("Edit formula and terminals…", () => FormulaRequested?.Invoke(node), flat: false));
         _fields.Children.Add(new LabButton(node.Breakpoint ? "Remove breakpoint" : "Set breakpoint", _session.ToggleBreakpoint, flat: false));
         var panel = _session.Path.Count == 0 ? _session.Instrument.Panel.FirstOrDefault(p => p.NodeId == id) : null;
         if (panel is not null)
         {
             _fields.Children.Add(LabTheme.Separator(false)); _fields.Children.Add(LabTheme.Text("Front-panel appearance", 13));
-            var choices = definition.Output switch { ValueKind.Number => new[] { "Numeric", "Knob", "Slider", "Gauge" }, ValueKind.Boolean => new[] { "Switch", "LED" }, ValueKind.String => new[] { "String" }, ValueKind.Array => new[] { "Array" }, _ => new[] { "Graph", "Chart" } };
+            var choices = definition.Output switch { ValueKind.Number => new[] { "Numeric", "Knob", "Slider", "Gauge" }, ValueKind.Boolean => new[] { "Switch", "LED" }, ValueKind.String => new[] { "String" }, ValueKind.Array => new[] { "Array" }, ValueKind.Error => new[] { "Error" }, ValueKind.Complex => new[] { "Complex" }, _ => new[] { "Graph", "Chart" } };
             var combo = new ComboBox { ItemsSource = choices, SelectedItem = panel.Widget, HorizontalAlignment = HorizontalAlignment.Stretch, MinHeight = 28, FontSize = 12 };
             combo.SelectionChanged += (_, _) => { if (combo.SelectedItem is string widget && widget != panel.Widget) Apply(() => _session.Edit(() => { panel.Widget = widget; if (widget is "Knob" or "Gauge") panel.Bounds = panel.Bounds with { Height = Math.Max(180, panel.Bounds.Height) }; }, false)); }; _fields.Children.Add(combo);
             Field("Minimum", panel.Minimum.ToString(CultureInfo.InvariantCulture), text => _session.Edit(() => panel.Minimum = Number(text), false));

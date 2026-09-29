@@ -3,7 +3,7 @@ using LabSpace.Core;
 namespace LabSpace.Dataflow;
 
 /// <summary>One structure invocation. Histories and collection builders are owned by this activation; persistent state is staged until the root frame commits.</summary>
-internal sealed class StructureActivation
+internal sealed class StructureActivation : IStructureActivation
 {
     private readonly DataflowRuntime _runtime;
     private readonly CompiledNode _node;

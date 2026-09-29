@@ -19,10 +19,11 @@ public sealed class StructureContractEditor : ScrollViewer
     private readonly CheckBox _conditional = new() { Content = "Enable conditional For terminal", FontSize = 12 };
     private readonly CheckBox _continue = new() { Content = "Continue while condition is TRUE", FontSize = 12 };
     private readonly bool _loop;
+    private readonly StructureContract _draft;
     public Dictionary<string, FrameworkElement> Fields { get; } = [];
     public StructureContractEditor(string kind, StructureContract draft)
     {
-        Content = _root; MaxHeight = 490; HorizontalScrollBarVisibility = ScrollBarVisibility.Auto; _loop = kind is "for" or "while";
+        _draft = draft; Content = _root; MaxHeight = 490; HorizontalScrollBarVisibility = ScrollBarVisibility.Auto; _loop = kind is "for" or "while";
         var note = LabTheme.Text("Declare the structure interface, then wire its connector nodes inside the body. Removing or renaming a terminal removes its attached wires; Undo restores the complete edit.", 12, "#555555"); note.TextWrapping = TextWrapping.Wrap; _root.Children.Add(note);
         _primary = new(draft.PrimaryOutput, "Primary output"); Fields["primary"] = _primary;
         _root.Children.Add(Row(LabTheme.Text("Primary output", 12), _primary));
@@ -70,7 +71,7 @@ public sealed class StructureContractEditor : ScrollViewer
         var index = _registerRows.Count; Fields["register-name-" + index] = r.Name; Fields["register-initialized-" + index] = r.Initialized; Fields["register-depth-" + index] = r.Depth;
         _registerRows.Add(r); _registers.Children.Add(row);
     }
-    public StructureContract ReadContract() => new()
+    public StructureContract ReadContract() => _draft with
     {
         PrimaryOutput = _primary.Text.Trim(), ConditionalFor = _conditional.IsChecked == true, ContinueWhenTrue = _continue.IsChecked == true,
         Inputs = _inputRows.Select(r => new InputTunnel { Name = r.Name.Text.Trim(), Type = Selected<ValueKind>(r.Type), Indexing = r.Indexing.IsChecked == true, Required = r.Required.IsChecked == true }).ToImmutableArray(),

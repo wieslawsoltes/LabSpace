@@ -20,6 +20,7 @@ public sealed class DiagramSurface : CanvasViewport
     public event Action<Node>? EditRequested;
     public event Action<Node?>? HoverChanged;
     public event Action<Point>? PaletteRequested;
+    public event Action<DiagramContextRequest>? ContextRequested;
     public DiagramSurface(InstrumentSession session, LabFonts fonts) : base(session)
     {
         Renderer = new(fonts);
@@ -61,11 +62,33 @@ public sealed class DiagramSurface : CanvasViewport
     {
         Focus(FocusState.Pointer); if (BeginPan(e)) return;
         var point = e.GetCurrentPoint(Canvas); _pointer = _start = ToWorld(point.Position);
-        if (point.Properties.IsRightButtonPressed) { PaletteRequested?.Invoke(point.Position); e.Handled = true; return; }
+        if (point.Properties.IsRightButtonPressed)
+        {
+            var terminal = HitPort(_pointer);
+            var target = terminal?.Node ?? HitNode(_pointer);
+            var wire = target is null ? Renderer.HitWire(Session.Diagram, new((float)_pointer.X, (float)_pointer.Y), 6 / Zoom) : null;
+            if (target is not null || wire is not null)
+            {
+                if (target is not null) Session.Select(target.Id); else Session.SelectWire(wire!);
+                var name = terminal is { } t ? t.Output ? NodeCatalog.Resolve(t.Node).Outputs[t.Index].Name : NodeCatalog.Resolve(t.Node).Inputs[t.Index].Name : null;
+                ContextRequested?.Invoke(new(target, name, terminal?.Output ?? false, wire, point.Position));
+            }
+            else PaletteRequested?.Invoke(point.Position);
+            e.Handled = true; return;
+        }
         if (!point.Properties.IsLeftButtonPressed) return;
         if (_placement is { } placement)
         {
             _placement = null; Safe(() => Session.Add(placement.Kind, Math.Round(_pointer.X / 10) * 10, Math.Round(_pointer.Y / 10) * 10));
+            Invalidate(); e.Handled = true; return;
+        }
+        var headerNode = HitNode(_pointer);
+        if (headerNode is { Frames.Count: > 0 } && DiagramGeometry.Selector(headerNode).Contains((float)_pointer.X, (float)_pointer.Y))
+        {
+            var header = DiagramGeometry.Selector(headerNode);
+            if (_pointer.X < header.Left + 22) Session.CyclePreview(headerNode.Id, -1);
+            else if (_pointer.X > header.Right - 22) Session.CyclePreview(headerNode.Id, 1);
+            else { Session.EnterFrame(headerNode.Id, Session.PreviewIndex(headerNode)); Fit(); }
             Invalidate(); e.Handled = true; return;
         }
         var port = HitPort(_pointer);
@@ -132,6 +155,13 @@ public sealed class DiagramSurface : CanvasViewport
         if (from is not null) Safe(() => Session.Connect(from, target.Node.Id, NodeCatalog.Resolve(target.Node).Inputs[target.Index].Name, _wiringOutput));
     }
     private void Safe(Action action) { try { action(); } catch (Exception error) { Session.Message(error.Message); } }
+    public void StartWire(string nodeId, string output)
+    {
+        Cancel(); var node = Session.Find(nodeId);
+        if (node is null || NodeCatalog.Resolve(node).FindOutput(output) is null) return;
+        _wiringFrom = nodeId; _wiringOutput = output; _wireMoved = false; _start = _pointer;
+        Focus(FocusState.Programmatic); Invalidate();
+    }
     public void Cancel() { _placement = null; _dragging = false; _marquee = false; _wiringFrom = null; Panning = false; Session.CancelGesture(); Canvas.ReleasePointerCaptures(); Invalidate(); }
     private SKRect MarqueeBounds() => new((float)Math.Min(_start.X, _pointer.X), (float)Math.Min(_start.Y, _pointer.Y), (float)Math.Max(_start.X, _pointer.X), (float)Math.Max(_start.Y, _pointer.Y));
     protected override SKRect ContentBounds()

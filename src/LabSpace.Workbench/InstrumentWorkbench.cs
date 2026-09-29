@@ -128,7 +128,7 @@ public sealed partial class InstrumentWorkbench : UserControl, IDisposable
         Menu("Edit", ("Undo\tCtrl+Z", Session.Undo), ("Redo\tCtrl+Y", Session.Redo), ("Copy\tCtrl+C", Session.Copy), ("Paste\tCtrl+V", Session.Paste), ("Duplicate\tCtrl+D", () => { Session.Copy(); Session.Paste(); }), ("Delete selection", Session.Delete), ("Select all", Session.SelectAll));
         Menu("View", ("Front Panel", () => SetView(StudioView.FrontPanel)), ("Block Diagram\tCtrl+E", () => SetView(StudioView.BlockDiagram)), ("Split views", () => SetView(StudioView.Split)), ("Fit to window", Fit), ("100% zoom", () => { FrontPanel.SetZoom(1); BlockDiagram.SetZoom(1); }), ("Properties", () => ShowProperties(true)), ("Error list", ToggleErrors));
         Menu("Project", ("New virtual instrument", Session.NewInstrument), ("VI properties…", () => Forget(EditInstrumentAsync())), ("Parent diagram", () => Session.Leave()));
-        Menu("Operate", ("Run\tCtrl+R", RunOrShowErrors), ("Run continuously\tF6", () => Session.Run(true)), ("Abort execution", Session.Abort), ("Pause / resume", Session.Pause), ("Single step\tF10", Session.Step), ("Set / remove breakpoint", Session.ToggleBreakpoint));
+        Menu("Operate", ("Run\tCtrl+R", RunOrShowErrors), ("Run continuously\tF6", () => Session.Run(true)), ("Abort execution", Session.Abort), ("Pause / resume", Session.Pause), ("Single step\tF10", Session.Step), ("Step into\tF11", Session.StepInto), ("Step out\tShift+F11", Session.StepOut), ("Set / remove breakpoint", Session.ToggleBreakpoint));
         Menu("Tools", ("Clean up diagram", () => { Session.AutoLayout(); BlockDiagram.Fit(); }), ("Attach / remove wire probe", Session.ToggleProbe), ("Toggle panel editing", () => { Session.PanelEditMode = !Session.PanelEditMode; Session.Notify(); }), ("Validate diagram", () => { Session.Validate(); ToggleErrors(); }));
         Menu("Window", ("Front Panel / Block Diagram", ToggleView), ("Split horizontally", () => SetView(StudioView.Split)), ("Fit all content", Fit));
         Menu("Help", ("LabSpace user guide", () => Forget(ShowHelpAsync())), ("Compatibility and limits", () => Forget(ShowHelpAsync(true))));
@@ -226,7 +226,9 @@ public sealed partial class InstrumentWorkbench : UserControl, IDisposable
     private void ToggleErrors() { BuildErrors(); _errorsHost.Visibility = _errorsHost.Visibility == Visibility.Visible ? Visibility.Collapsed : Visibility.Visible; }
     private async void EditNode(Node node)
     {
-        if (_dialogOpen) return; _dialogOpen = true;
+        if (_dialogOpen) return;
+        if (node.Kind == "formula") { OpenFormula(node); return; }
+        _dialogOpen = true;
         try
         {
             var kind = NodeCatalog.Get(node.Kind); var editable = kind.IsControl || node.Kind is "constant" or "bool" or "string" or "array" or "input" or "output";

@@ -15,6 +15,7 @@ public sealed partial class InstrumentSession
     {
         var node = Find(id) ?? throw new ArgumentException("Structure not found.");
         if (!NodeCatalog.Resolve(node).IsStructure) throw new ArgumentException("Select a structure.");
+        if (node.Frames.Count > 0) { var draft = FramesDraft(node); draft.Contract = contract; ConfigureFrames(id, draft); return; }
         var probe = new Node { Kind = node.Kind, Contract = contract, Body = new(), Alternative = new() };
         var errors = GraphCompiler.Validate(new() { Nodes = [probe] }).Where(d => d.Code == "CONTRACT").ToArray();
         if (errors.Length > 0) throw new GraphValidationException(errors);

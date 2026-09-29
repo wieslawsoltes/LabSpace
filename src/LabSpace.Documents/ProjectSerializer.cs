@@ -8,7 +8,7 @@ namespace LabSpace.Documents;
 public static class ProjectSerializer
 {
     public const int MaximumBytes = 8 * 1024 * 1024;
-    private static readonly HashSet<string> Widgets = ["Numeric", "Knob", "Slider", "Gauge", "LED", "Switch", "Graph", "Chart", "String", "Array"];
+    private static readonly HashSet<string> Widgets = ["Numeric", "Knob", "Slider", "Gauge", "LED", "Switch", "Graph", "Chart", "String", "Array", "Error", "Complex"];
     public static string Save(LabProject project)
     {
         Validate(project);
@@ -20,12 +20,12 @@ public static class ProjectSerializer
     {
         if (Encoding.UTF8.GetByteCount(json) > MaximumBytes) throw new InvalidDataException("Project exceeds the 8 MiB limit.");
         var project = JsonSerializer.Deserialize(json, ProjectJsonContext.Default.LabProject) ?? throw new InvalidDataException("Project is empty.");
-        Validate(project); project.FormatVersion = 2; return project;
+        Validate(project); project.FormatVersion = 3; return project;
     }
     public static LabProject Clone(LabProject project) => Load(Save(project));
     public static void Validate(LabProject project)
     {
-        if (project.FormatVersion is not (1 or 2)) throw new InvalidDataException("Unsupported LabSpace format version. NI .vi binaries are not supported.");
+        if (project.FormatVersion is not (1 or 2 or 3)) throw new InvalidDataException("Unsupported LabSpace format version. NI .vi binaries are not supported.");
         if (project.Instruments is null || project.Instruments.Count is < 1 or > 64 || string.IsNullOrWhiteSpace(project.Name)) throw new InvalidDataException("A project must have a name and 1–64 VIs.");
         var ids = new HashSet<string>(); var total = 0;
         foreach (var vi in project.Instruments)
@@ -52,6 +52,13 @@ public static class ProjectSerializer
             if (!NodeCatalog.TryGet(node.Kind, out _)) throw new InvalidDataException($"Unsupported function '{node.Kind}'. This project requires an unavailable function; no changes were imported.");
             if (!Enum.IsDefined(node.DataType)) throw new InvalidDataException("Unsupported connector data type.");
             if (node.Contract is { } contract) ValidateContract(contract);
+            if (node.Frames is null || node.Frames.Count > 64) throw new InvalidDataException("Invalid frame list.");
+            var frameIds = new HashSet<string>(StringComparer.Ordinal);
+            foreach (var frame in node.Frames)
+            {
+                if (frame is null || string.IsNullOrWhiteSpace(frame.Id) || frame.Id.Length > 128 || !frameIds.Add(frame.Id) || frame.Selector is null || frame.Selector.Length > 4096) throw new InvalidDataException("Invalid or duplicate frame identity/selector.");
+                Check(frame.Diagram, depth + 1, ref total);
+            }
             if (node.Text.Length > 1000000 || node.Label.Length > 4096 || Math.Abs(node.X) > 1000000 || Math.Abs(node.Y) > 1000000) throw new InvalidDataException("Node payload exceeds the limit.");
             if (node.Body is not null) Check(node.Body, depth + 1, ref total);
             if (node.Alternative is not null) Check(node.Alternative, depth + 1, ref total);
@@ -62,6 +69,8 @@ public static class ProjectSerializer
     {
         if (contract.Inputs.IsDefault || contract.Outputs.IsDefault || contract.Registers.IsDefault || contract.Inputs.Length > 32 || contract.Outputs.Length > 32 || contract.Registers.Length > 16 || string.IsNullOrWhiteSpace(contract.PrimaryOutput) || contract.PrimaryOutput.Length > 64)
             throw new InvalidDataException("Invalid structure contract.");
+        if (contract.Locals.IsDefault || contract.Locals.Length > 32 || !Enum.IsDefined(contract.SelectorType) || contract.Locals.Any(l => l is null || !Name(l.Name) || !Enum.IsDefined(l.Type) || string.IsNullOrWhiteSpace(l.SourceFrameId) || l.SourceFrameId.Length > 128))
+            throw new InvalidDataException("Invalid sequence local metadata.");
         static bool Name(string? name) => !string.IsNullOrWhiteSpace(name) && name.Length <= 64 && name.All(ch => char.IsLetterOrDigit(ch) || ch == '_');
         if (contract.Inputs.Any(t => t is null || !Name(t.Name) || !Enum.IsDefined(t.Type)) || contract.Outputs.Any(t => t is null || !Name(t.Name) || !Enum.IsDefined(t.Type) || !Enum.IsDefined(t.Mode) || !Name(t.Condition)) || contract.Registers.Any(r => r is null || !Name(r.Name) || !Enum.IsDefined(r.Type) || r.HistoryDepth is < 1 or > 16))
             throw new InvalidDataException("Invalid tunnel or shift register metadata.");

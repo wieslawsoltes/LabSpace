@@ -10,9 +10,14 @@ public static class DiagramGeometry
         if (!NodeCatalog.TryGet(n.Kind, out var d)) return new((float)n.X, (float)n.Y, (float)n.X + 100, (float)n.Y + 60);
         d = NodeCatalog.Resolve(n);
         var literal = n.Kind is "constant" or "bool" or "string";
-        var w = d.IsStructure ? 280 : n.Kind == "simulate" ? 118 : d.IsControl || d.IsIndicator ? 40 : literal ? 72 : 48;
-        var h = d.IsStructure ? Math.Max(190, 20 + Math.Max(d.Inputs.Length, d.Outputs.Length) * 24) : n.Kind == "simulate" ? 78 : literal ? 28 : d.IsControl || d.IsIndicator ? 32 : 48;
+        var w = d.IsStructure || n.Kind == "formula" ? 280 : n.Kind == "simulate" ? 118 : d.IsControl || d.IsIndicator ? 40 : literal ? 72 : 48;
+        var h = d.IsStructure || n.Kind == "formula" ? Math.Max(190, 20 + Math.Max(d.Inputs.Length, d.Outputs.Length) * 24) : n.Kind == "simulate" ? 78 : literal ? 28 : d.IsControl || d.IsIndicator ? 32 : 48;
         return new((float)n.X, (float)n.Y, (float)n.X + w, (float)n.Y + h);
+    }
+    public static SKRect Selector(Node node)
+    {
+        var bounds = Bounds(node);
+        return new(bounds.Left + 24, bounds.Top, bounds.Right - 24, bounds.Top + 21);
     }
     public static SKPoint Output(Node n, int index = 0)
     {

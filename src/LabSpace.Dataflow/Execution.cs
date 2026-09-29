@@ -79,7 +79,7 @@ public sealed class DataflowRuntime
             case "time": return Value.Numeric(Time);
             case "random": return Value.Numeric(Random());
             case "feedback": return State(path + "/" + n.Id, Value.Numeric(n.Value), pending);
-            default: return ExtendedKernels.Evaluate(n, input);
+            default: return ProgrammingKernels.Supports(kind) ? ProgrammingKernels.Evaluate(n, input)["result"] : ExtendedKernels.Evaluate(n, input);
         }
     }
     private static int Integer(double value, int minimum, int maximum, string name)

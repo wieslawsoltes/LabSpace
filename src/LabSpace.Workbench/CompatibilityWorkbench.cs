@@ -10,10 +10,16 @@ public sealed partial class InstrumentWorkbench
     private readonly Grid _overlay = new() { Visibility = Visibility.Collapsed, Background = LabTheme.Brush("#20000000") };
     private readonly Dictionary<string, FrameworkElement> _overlayFields = [];
     private StructureContractEditor? _contractEditor;
+    private FrameStructureEditor? _frameEditor;
+    private FormulaEditor? _formulaEditor;
+    private readonly StructureFrameSelector _frameSelector = new();
     private LabPane? _quickPane;
     public QuickDropControl QuickDrop { get; } = new();
     public string OverlayMode { get; private set; } = "";
-    public IEnumerable<KeyValuePair<string, FrameworkElement>> OverlayFields => _overlayFields.Concat(_contractEditor?.Fields ?? new Dictionary<string, FrameworkElement>());
+    public IEnumerable<KeyValuePair<string, FrameworkElement>> OverlayFields => _overlayFields
+        .Concat(_contractEditor?.Fields ?? new Dictionary<string, FrameworkElement>())
+        .Concat(_frameEditor?.Fields ?? Enumerable.Empty<KeyValuePair<string, FrameworkElement>>())
+        .Concat(_formulaEditor?.Fields ?? Enumerable.Empty<KeyValuePair<string, FrameworkElement>>());
 
     private void InitializeCompatibility(Grid root, StackPanel tools)
     {
@@ -21,11 +27,19 @@ public sealed partial class InstrumentWorkbench
         tools.Children.Add(Command("quick-drop", "Quick Drop (Ctrl+Space)", () => OpenQuickDrop(View == StudioView.FrontPanel), "quick-drop"));
         tools.Children.Add(Command("structure", "Tunnels and shift registers", () => { if (Session.SelectedNode is { } node && NodeCatalog.Resolve(node).IsStructure) OpenStructure(node); else Session.Message("Select a For, While, Case or SubVI structure first."); }, "VI"));
         tools.Children.Add(Command("step-into", "Step into (F11)", Session.StepInto, "↓"));
+        tools.Children.Add(Command("step-out", "Step out (Shift+F11)", Session.StepOut, "↑"));
+        tools.Children.Add(Command("formula", "Edit Formula Node", () => { if (Session.SelectedNode is { Kind: "formula" } node) OpenFormula(node); else Session.Message("Select a Formula Node first."); }, "f(x)"));
+        tools.Children.Add(Command("frames", "Manage Case / Sequence frames", () => { if (Session.SelectedNode is { Kind: "case" or "sequence" } node) OpenFrames(node); else Session.Message("Select a Case or Sequence structure first."); }, "SEQ"));
         _viewTabs.Children.Add(Command("true-branch", "TRUE case", () => SwitchCase(false), null, true, true));
         _viewTabs.Children.Add(Command("false-branch", "FALSE case", () => SwitchCase(true), null, true, true));
+        _viewTabs.Children.Add(_frameSelector);
+        _frameSelector.FrameSelected += index => { Safe(() => Session.SelectFrame(index)); BlockDiagram.Fit(); };
+        _commands["frame-previous"] = _frameSelector.Previous; _commands["frame-next"] = _frameSelector.Next;
         Grid.SetRow(_overlay, 0); Grid.SetRowSpan(_overlay, 6); root.Children.Add(_overlay);
         _overlay.KeyDown += (_, e) => { if (e.Key == VirtualKey.Escape) { CloseOverlay(); e.Handled = true; } };
         Inspector.StructureRequested += OpenStructure;
+        Inspector.FormulaRequested += OpenFormula;
+        BlockDiagram.ContextRequested += OpenDiagramContext;
         FrontPanel.PaletteRequested += p => OpenQuickDrop(true, p);
         BlockDiagram.PaletteRequested += p => OpenQuickDrop(false, p);
         QuickDrop.Chosen += entry =>
@@ -49,6 +63,8 @@ public sealed partial class InstrumentWorkbench
         quick.Invoked += (_, e) => { if (_dialogOpen) return; OpenQuickDrop(View == StudioView.FrontPanel); e.Handled = true; }; KeyboardAccelerators.Add(quick);
         var step = new KeyboardAccelerator { Key = VirtualKey.F11 };
         step.Invoked += (_, e) => { if (_dialogOpen) return; Safe(Session.StepInto); e.Handled = true; }; KeyboardAccelerators.Add(step);
+        var stepOut = new KeyboardAccelerator { Key = VirtualKey.F11, Modifiers = VirtualKeyModifiers.Shift };
+        stepOut.Invoked += (_, e) => { if (_dialogOpen) return; Safe(Session.StepOut); e.Handled = true; }; KeyboardAccelerators.Add(stepOut);
     }
     private void OpenQuickDrop(bool controls, Point? position = null)
     {
@@ -66,6 +82,7 @@ public sealed partial class InstrumentWorkbench
     }
     private void OpenStructure(Node node)
     {
+        if (node.Kind is "case" or "sequence") { OpenFrames(node); return; }
         if (_dialogOpen) return;
         _dialogOpen = true; OverlayMode = "structure";
         _contractEditor = new(node.Kind, InstrumentSession.ContractDraft(node));
@@ -87,7 +104,7 @@ public sealed partial class InstrumentWorkbench
     private void CloseOverlay()
     {
         if (_quickPane is not null) { _quickPane.PaneContent = null; _quickPane = null; }
-        _overlay.Visibility = Visibility.Collapsed; _overlay.Children.Clear(); _overlayFields.Clear(); _contractEditor = null; OverlayMode = ""; _dialogOpen = false;
+        _overlay.Visibility = Visibility.Collapsed; _overlay.Children.Clear(); _overlayFields.Clear(); _contractEditor = null; _frameEditor = null; _formulaEditor = null; OverlayMode = ""; _dialogOpen = false;
         if (View == StudioView.FrontPanel) FrontPanel.Focus(FocusState.Programmatic); else BlockDiagram.Focus(FocusState.Programmatic);
     }
     private void RunOrShowErrors()
@@ -98,17 +115,9 @@ public sealed partial class InstrumentWorkbench
     private void UpdateCompatibility()
     {
         if (_commands["run"].Content is VectorIcon icon) { var name = Session.Diagnostics.Count > 0 ? "run-broken" : "run"; if (icon.Icon != name) { icon.Icon = name; icon.Invalidate(); } }
-        var inCase = false;
-        if (Session.Path.Count > 0)
-        {
-            var graph = Session.Instrument.Diagram;
-            for (var i = 0; i < Session.Path.Count; i++)
-            {
-                var level = Session.Path[i]; var node = graph.Nodes.FirstOrDefault(n => n.Id == level.NodeId); if (node is null) break;
-                if (i == Session.Path.Count - 1) inCase = node.Kind == "case";
-                graph = (level.Alternative ? node.Alternative : node.Body) ?? graph;
-            }
-        }
+        var owner = Session.CurrentOwner;
+        var inCase = owner is { Kind: "case", Frames.Count: 0 };
+        _frameSelector.Configure(owner, Session.Path.LastOrDefault()?.FrameId);
         _commands["true-branch"].Visibility = _commands["false-branch"].Visibility = inCase ? Visibility.Visible : Visibility.Collapsed;
         if (inCase) { _commands["true-branch"].SetActive(!Session.Path[^1].Alternative); _commands["false-branch"].SetActive(Session.Path[^1].Alternative); }
         if (Session.IsPaused && Session.DebugFrame is { } frame)
