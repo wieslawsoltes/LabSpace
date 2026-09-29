@@ -4,7 +4,7 @@ namespace LabSpace.Documents;
 
 public static class Examples
 {
-    public static LabProject Create() => new() { Name = "Signal analysis.lvproj", Instruments = [SignalAnalysis(), Arithmetic(), Loop(), StructuredExamples.IndexedAccumulator(), AdvancedExamples.CaseDispatch(), AdvancedExamples.Sequence(), AdvancedExamples.ErrorsAndComplex()] };
+    public static LabProject Create() => new() { Name = "Signal analysis.lvproj", Instruments = [SignalAnalysis(), Arithmetic(), Loop(), StructuredExamples.IndexedAccumulator(), AdvancedExamples.CaseDispatch(), AdvancedExamples.Sequence(), AdvancedExamples.ErrorsAndComplex(), FormulaExamples.ControlFlow()] };
     public static VirtualInstrument Blank(string name = "Untitled.vi") => new() { Name = name, Description = "Add controls and functions, wire compatible terminals, then Run." };
     public static Node NewNode(string kind, double x, double y)
     {

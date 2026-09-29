@@ -30,7 +30,7 @@ Removing or renaming a terminal removes its attached wires; Undo restores them. 
 
 Double-click a structure to edit its actual embedded body, shown in the cached thumbnail. Wire typed Connector Inputs to functions and Connector Outputs. **Parent Diagram** returns. TRUE/FALSE buttons choose the Case branch to edit; execution still follows its wired Boolean selector.
 
-Ordinary tunnels/registers support numbers, Booleans, Unicode strings, numeric arrays and waveforms. Numeric input auto-indexing gives each For iteration one array element; the shortest indexed array and explicit count bound execution. While indexing supplies zero after an array ends and does not terminate the loop. Outputs return their last value, collect numbers, concatenate numeric arrays, or include only iterations whose named Boolean condition is true.
+Ordinary tunnels/registers support numbers, Booleans, Unicode strings, numeric arrays, waveforms, error clusters and complex values. Numeric input auto-indexing gives each For iteration one array element; the shortest indexed array and explicit count bound execution. While indexing supplies zero after an array ends and does not terminate the loop. Outputs return their last value, collect numbers, concatenate numeric arrays, or include only iterations whose named Boolean condition is true.
 
 At zero For iterations, collections are empty, last-value tunnels return type defaults and registers return initial/prior values. Initialized registers reset for every invocation. Uninitialized registers retain successfully committed state at their invocation path until reset, code-affecting edits, Undo/Redo or VI/body navigation. Stacked histories expose `state`, `state:1`, `state:2`, and later entries.
 
@@ -82,4 +82,8 @@ This is a usable independent subset, not complete NI binary, G-language, hardwar
 
 ## Multi-frame programming and typed values (0.3)
 
-See [advanced structures](advanced-structures.md) for executable cases/sequences, staged frame and formula editors, error/complex controls, terminal context creation and step-out. New projects include seven examples. Existing recovery projects retain their own examples; use **File → Load example project** after saving work to load the expanded example collection.
+See [advanced structures](advanced-structures.md) for executable cases/sequences, staged frame and formula editors, error/complex controls, terminal context creation and step-out. New projects include eight examples, including Formula Control Flow.vi (84 and 9 at its defaults). Existing recovery projects retain their own examples; use **File → Load example project** after saving work to load the expanded example collection.
+
+## Cross-VI debugging and browser-storage validation
+
+See [Debugger](debugger.md) for session-only overrides, scoped retained values, activation navigation, bounds and reusable controls. Run `npm run test:storage` for dependency-free IndexedDB connection/transaction and file-picker lifecycle regressions. Recovery writes are acknowledged only when the transaction commits; malformed saved records are rejected rather than replaced with an empty project. Browsers remain subject to storage quota/eviction: keep explicit project saves.

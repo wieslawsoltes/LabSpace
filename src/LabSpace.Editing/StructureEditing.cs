@@ -84,6 +84,7 @@ public sealed partial class InstrumentSession
     }
     public void StepInto()
     {
+        if (!DebuggingEnabled) { Message("Enable debugging to step into this VI."); return; }
         try
         {
             _stepOutTarget = null; IsRunning = false; IsPaused = true; _frame ??= _runtime.Start(Plan()); _frame.StepInto(); PublishFrame();

@@ -93,7 +93,7 @@ public sealed partial class InstrumentWorkbench
     }
     private void RunOrShowErrors()
     {
-        if (Session.Diagnostics.Count > 0) { _errorsHost.Visibility = Visibility.Visible; BuildErrors(); Session.Message("The VI is broken. Resolve the listed errors before running."); }
+        if (Session.Diagnostics.Count > 0) { ShowDebugWindow(false); _errorsHost.Visibility = Visibility.Visible; BuildErrors(); Session.Message("The VI is broken. Resolve the listed errors before running."); }
         else Session.Run();
     }
     private void UpdateCompatibility()

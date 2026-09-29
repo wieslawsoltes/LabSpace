@@ -120,6 +120,7 @@ public sealed partial class InstrumentSession
     }
     public void StepOut()
     {
+        if (!DebuggingEnabled) { Message("Enable debugging to step out of this VI."); return; }
         if (_frame is null || !IsPaused) { Message("Pause inside a structure before stepping out."); return; }
         _stepOutTarget = _frame.ActiveFrame; _continuous = false; IsPaused = false; IsRunning = true; Pump();
     }

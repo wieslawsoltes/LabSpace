@@ -142,13 +142,13 @@ public sealed partial class InstrumentWorkbench
             Add("node-open", NodeCatalog.Resolve(owner).IsStructure ? "Open Visible Diagram" : "Edit…", () => { if (NodeCatalog.Resolve(owner).IsStructure) { Session.Enter(owner.Id); BlockDiagram.Fit(); } else EditNode(owner); });
             if (StructureFrames.HasFrames(owner)) Add("node-frames", "Cases and Frames…", () => OpenFrames(owner));
             if (NodeCatalog.Resolve(owner).IsStructure) Add("node-contract", "Tunnels and Shift Registers…", () => OpenStructure(owner));
-            Add("node-breakpoint", owner.Breakpoint ? "Clear Breakpoint" : "Set Breakpoint", () => Session.Edit(() => owner.Breakpoint = !owner.Breakpoint, false));
+            Add("node-breakpoint", Session.IsBreakpoint(owner) ? "Clear Breakpoint" : "Set Breakpoint", () => Session.ToggleBreakpoint(owner.Id));
             Add("node-delete", "Delete", Session.Delete);
         }
         else if (target.Wire is { } wire)
         {
             Add("wire-branch", "Branch Wire", () => BlockDiagram.StartWire(wire.From, wire.Output));
-            Add("wire-probe", wire.Probe ? "Remove Probe" : "Probe", () => Session.Edit(() => wire.Probe = !wire.Probe, false));
+            Add("wire-probe", Session.IsProbe(wire) ? "Remove Probe" : "Probe", () => Session.ToggleProbe(wire.Id));
             Add("wire-delete", "Delete Wire", Session.Delete);
         }
         Add("context-functions", "Functions Palette…", () => OpenQuickDrop(false, target.Screen));

@@ -21,6 +21,10 @@ public sealed class DataflowRuntime
     private Random _random = new(42);
     public double Time { get; private set; }
     public long Frames { get; private set; }
+    /// <summary>Optional synchronous diagnostic sink, called once after each activation completes.</summary>
+    /// <remarks>The completed dictionaries are no longer modified by the runtime. Observers must not mutate them or throw.</remarks>
+    public event Action<ExecutionFrame>? FrameCompleted;
+    internal void ObserveCompletedFrame(ExecutionFrame frame) => FrameCompleted?.Invoke(frame);
     public ExecutionFrame Start(CompiledGraph graph, CancellationToken cancellation = default, int maximumNodes = 100000) => new(this, graph, new(maximumNodes, cancellation), new Dictionary<string, Value>(), "root");
     public ExecutionFrame Run(CompiledGraph graph, CancellationToken cancellation = default, int maximumNodes = 100000)
     {

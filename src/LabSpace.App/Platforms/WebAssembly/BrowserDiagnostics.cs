@@ -24,6 +24,19 @@ internal sealed class BrowserDiagnostics : IDisposable
             json.WriteString("overlay", _workbench.OverlayMode); json.WriteString("placement", _workbench.BlockDiagram.PlacementKind ?? _workbench.FrontPanel.PlacementKind);
             json.WriteNumber("debugDepth", session.DebugFrame?.Path.Count(c => c == '/') ?? 0);
             json.WriteNumber("functions", NodeCatalog.All.Count);
+            json.WriteBoolean("debugWindow", _workbench.DebugWindowVisible);
+            json.WriteBoolean("debuggingEnabled", session.DebuggingEnabled);
+            json.WriteNumber("debugRefreshes", _workbench.DebugWindow.RefreshCount);
+            json.WriteNumber("debugBytes", session.RetainedDebugBytes);
+            json.WriteStartObject("debugFields"); foreach (var (name, element) in _workbench.DebugWindow.Fields) Bounds(json, name, _workbench.ElementBounds(element)); json.WriteEndObject();
+            json.WriteStartArray("probes");
+            foreach (var probe in session.GetProbes())
+            {
+                json.WriteStartObject(); json.WriteString("instrument", probe.Instrument); json.WriteString("path", probe.Address.Path);
+                json.WriteString("wire", probe.Address.ObjectId); json.WriteString("value", probe.Value?.ToString());
+                json.WriteBoolean("retained", probe.Retained); json.WriteBoolean("live", probe.Live); json.WriteEndObject();
+            }
+            json.WriteEndArray();
             json.WriteStartObject("overlayFields"); foreach (var (name, element) in _workbench.OverlayFields) Bounds(json, name, _workbench.ElementBounds(element)); json.WriteEndObject();
             json.WriteStartObject("commands"); foreach (var (name, element) in _workbench.Commands) Bounds(json, name, _workbench.ElementBounds(element)); json.WriteEndObject();
             json.WriteStartObject("palette"); foreach (var (name, element) in _workbench.Palette.Entries) Bounds(json, name, _workbench.ElementBounds(element)); json.WriteEndObject();
@@ -34,7 +47,7 @@ internal sealed class BrowserDiagnostics : IDisposable
             foreach (var node in session.Diagram.Nodes)
             {
                 var rect = DiagramGeometry.Bounds(node); var p = surface.ToScreen(new(node.X, node.Y)); var output = DiagramGeometry.Output(node); var outputPoint = surface.ToScreen(new(output.X, output.Y));
-                json.WriteStartObject(); json.WriteString("id", node.Id); json.WriteString("kind", node.Kind); json.WriteString("label", node.Label); json.WriteNumber("value", node.Value); json.WriteNumber("modelX", node.X); json.WriteNumber("modelY", node.Y); json.WriteBoolean("selected", session.Selection.Contains(node.Id));
+                json.WriteStartObject(); json.WriteString("id", node.Id); json.WriteString("kind", node.Kind); json.WriteString("label", node.Label); json.WriteBoolean("breakpoint", session.IsBreakpoint(node)); json.WriteNumber("value", node.Value); json.WriteNumber("modelX", node.X); json.WriteNumber("modelY", node.Y); json.WriteBoolean("selected", session.Selection.Contains(node.Id));
                 Bounds(json, "bounds", new(origin.X + p.X, origin.Y + p.Y, rect.Width * surface.Zoom, rect.Height * surface.Zoom)); Point(json, "output", origin.X + outputPoint.X, origin.Y + outputPoint.Y);
                 json.WriteStartObject("inputs"); if (NodeCatalog.TryGet(node.Kind, out _)) for (var i = 0; i < NodeCatalog.Resolve(node).Inputs.Length; i++) { var q = DiagramGeometry.Input(node, i); var screen = surface.ToScreen(new(q.X, q.Y)); Point(json, NodeCatalog.Resolve(node).Inputs[i].Name, origin.X + screen.X, origin.Y + screen.Y); } json.WriteEndObject();
                 var definition = NodeCatalog.Resolve(node);
@@ -45,12 +58,12 @@ internal sealed class BrowserDiagnostics : IDisposable
                 json.WriteStartArray("frameLabels"); foreach (var frame in node.Frames) json.WriteStringValue(frame.Label); json.WriteEndArray();
                 json.WriteStartObject("namedValues"); foreach (var port in definition.Outputs) { var v = session.OutputValue(node.Id, port.Name); if (v is not null) json.WriteString(port.Name, v.ToString()); } json.WriteEndObject();
                 if (node.Contract is { Registers.Length: > 0 } contract) json.WriteBoolean("registerInitialized", contract.Registers[0].Initialized);
-                if (session.Values.TryGetValue(node.Id, out var result)) { json.WriteString("result", result.ToString()); if (result.Kind == ValueKind.Error) { json.WriteBoolean("errorStatus", result.Error.Status); json.WriteNumber("errorCode", result.Error.Code); json.WriteString("errorSource", result.Error.Source); } if (result.Kind == ValueKind.Complex) { json.WriteNumber("real", result.Complex.Real); json.WriteNumber("imaginary", result.Complex.Imaginary); } if (result.Kind == ValueKind.Number) json.WriteNumber("number", result.Number); json.WriteNumber("samples", result.Samples.Length); json.WriteStartArray("sampleValues"); foreach (var value in result.Samples.Take(16)) json.WriteNumberValue(value); json.WriteEndArray(); }
+                if (session.OutputValue(node.Id) is { } result) { json.WriteString("result", result.ToString()); if (result.Kind == ValueKind.Error) { json.WriteBoolean("errorStatus", result.Error.Status); json.WriteNumber("errorCode", result.Error.Code); json.WriteString("errorSource", result.Error.Source); } if (result.Kind == ValueKind.Complex) { json.WriteNumber("real", result.Complex.Real); json.WriteNumber("imaginary", result.Complex.Imaginary); } if (result.Kind == ValueKind.Number) json.WriteNumber("number", result.Number); json.WriteNumber("samples", result.Samples.Length); json.WriteStartArray("sampleValues"); foreach (var value in result.Samples.Take(16)) json.WriteNumberValue(value); json.WriteEndArray(); }
                 json.WriteEndObject();
             }
             json.WriteEndArray();
             json.WriteStartArray("panel"); foreach (var item in session.Instrument.Panel) { var p = front.ToScreen(new(item.Bounds.X, item.Bounds.Y)); json.WriteStartObject(); json.WriteString("id", item.Id); json.WriteString("nodeId", item.NodeId); json.WriteString("widget", item.Widget); Bounds(json, "bounds", new(frontOrigin.X + p.X, frontOrigin.Y + p.Y, item.Bounds.Width * front.Zoom, item.Bounds.Height * front.Zoom)); json.WriteEndObject(); } json.WriteEndArray();
-            json.WriteStartArray("wires"); foreach (var wire in session.Diagram.Wires) { json.WriteStartObject(); json.WriteString("id", wire.Id); json.WriteString("from", wire.From); json.WriteString("to", wire.To); json.WriteString("input", wire.Input); json.WriteString("output", wire.Output); json.WriteEndObject(); } json.WriteEndArray();
+            json.WriteStartArray("wires"); foreach (var wire in session.Diagram.Wires) { json.WriteStartObject(); json.WriteString("id", wire.Id); json.WriteString("from", wire.From); json.WriteString("to", wire.To); json.WriteString("input", wire.Input); json.WriteString("output", wire.Output); json.WriteBoolean("probe", session.IsProbe(wire)); json.WriteEndObject(); } json.WriteEndArray();
             json.WriteEndObject();
         }
         BrowserFiles.PublishDiagnostics(Encoding.UTF8.GetString(memory.ToArray()));

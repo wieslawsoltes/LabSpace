@@ -9,7 +9,7 @@ public static class HelpContent
 
         Sequence frames execute in order. A Sequence local write publishes a named typed value to later Sequence local read nodes. One frame owns each local writer. Use Previous/Next frame while inside a sequence. Running inside an editor still runs the root VI, so locals retain their caller context. Reordering a reader before its writer reports an error; Undo restores both frames and wiring.
 
-        Double-click a Formula Node to edit named inputs, named outputs and source. Inputs are read-only. Enter a scalar expression or assignments such as temp = x * 2; result = temp + 1;. All outputs must be assigned. Arithmetic, comparisons, &&, || and ?: are supported. ln is natural log; log/log10 are base ten; log2 is base two. Invalid source stays in the editor with a character position. This bounded subset cannot run loops, native code or I/O.
+        Double-click a Formula Node to edit named inputs, named outputs and source. Inputs are read-only. Enter a scalar expression or assignments such as temp = x * 2; result = temp + 1;. All outputs must be assigned. Arithmetic, comparisons, &&, || and ?: are supported. ln is natural log; log/log10 are base ten; log2 is base two. Invalid source stays in the editor with a character position. Scalar double/float64 declarations, lexical blocks, if/else, for/while/do loops, break/continue and compound updates are supported. Instruction fuel and cancellation bound interpretation. General C types, arrays, native code and I/O are not supported.
 
         Error controls edit Boolean status, signed 32-bit code and source. Nonzero code with FALSE status is a warning. Merge Errors prefers the first error, otherwise the first warning. Complex controls edit real/imaginary finite doubles. Indicators display actual diagram values.
 
@@ -17,7 +17,7 @@ public static class HelpContent
 
         YOUR FIRST VIRTUAL INSTRUMENT
 
-        LabSpace opens Signal Analysis.vi, a working simulated acquisition. The front panel is the instrument interface; the block diagram is its executable program. The example runs once at startup. No physical hardware is connected. Arithmetic.vi, Stateful Loop.vi, Indexed Accumulator.vi, Case Dispatch.vi, Sequence Pipeline.vi and Errors and Complex.vi are also available in the project explorer.
+        LabSpace opens Signal Analysis.vi, a working simulated acquisition. The front panel is the instrument interface; the block diagram is its executable program. The example runs once at startup. No physical hardware is connected. Arithmetic.vi, Stateful Loop.vi, Indexed Accumulator.vi, Case Dispatch.vi, Sequence Pipeline.vi Errors and Complex.vi and Formula Control Flow.vi are also available in the project explorer.
 
         1  OPERATE THE FRONT PANEL
         Drag the Amplitude knob vertically or horizontally. Click Frequency to enter a value. Run updates the graphs, RMS gauge and alarm. Run Continuously targets a 40 ms timer interval; this is not real-time scheduling. Click a plot to place a value cursor. Double-click a control to edit its value.
@@ -41,6 +41,11 @@ public static class HelpContent
         5  DEBUG
         A broken Run arrow opens the compile error list. F10 steps over a top-level node; F11 steps into resumable nested work. Context Help shows the active nested frame and recent values without changing the editor navigation path. Set breakpoints inside a body, return to its caller, then Run to stop before that node. Run resumes. Highlight advances one activation transition per tick. Select a wire and Attach Probe to inspect its named output value. Abort discards the active frame; pending feedback and uninitialized-register values commit only after the root frame succeeds.
 
+        DEBUG WINDOW AND RETAINED VALUES
+        Choose View → Debug window or the Debug toolbar command. The modeless table lists named probes across every loaded VI and hidden structure frame. Locate reveals a source wire; Remove drops the probe; the filter matches VI, diagram and terminals. Completed activation values are retained within a 16 MiB / 128-frame conservative cache. Retained means previously observed, not a current measurement. Switching VI aborts current execution; locating within the same VI preserves a paused activation. Repeated loop activations retain their latest completed values.
+
+        Allow debugging gates breakpoints, stepping and capture; Retain wire values controls historical capture; Clear values releases the cache. These options and marker overrides are session-only and do not change saved source or Undo history. Imported markers remain defaults. Stopping at a breakpoint never forces this window open. The hidden pane does no table refresh work. Formula Control Flow.vi outputs 84 and 9; its result probe can be inspected after switching VI.
+
         6  FILES AND RECOVERY
         Save downloads version-3 .labspace.json containing VIs, diagrams, contracts and panel layouts. Version-1 and version-2 projects migrate on load. Earlier LabSpace releases cannot read version 3; retain original copies. NI .vi, .ctl and .lvproj files are not parsed. Browser recovery is periodic local IndexedDB storage; desktop recovery uses the user's application-data directory. Keep explicit saves. Export Waveform CSV writes the selected waveform or first available result. Imported JSON does not evaluate script or install drivers.
 
@@ -51,17 +56,17 @@ public static class HelpContent
         Sources support sine, square and triangle signals with optional deterministic noise. Signal frequency must not exceed Nyquist. Moving Average is block-local. FFT uses a periodic Hann window with coherent-gain-corrected one-sided amplitudes. RMS avoids unnecessary overflow. Plot decimation preserves extrema. Loops are limited to 10,000 iterations; nested work shares a 100,000-node budget. An individual kernel runs to completion: cooperative UI scheduling is not preemptive or hard real time.
         """;
     public const string Compatibility = """
-        INDEPENDENT EARLY IMPLEMENTATION — 0.2
+        INDEPENDENT IMPLEMENTATION — 0.3
 
         LabSpace is an MIT-licensed instrumentation workbench inspired by the classic NI LabVIEW workflow. It is not NI LabVIEW, is not endorsed by NI and contains no NI source, icons, drivers or proprietary runtime components.
 
         IMPLEMENTED
-        Five typed value kinds; executable arithmetic, comparison, Boolean, Unicode string, numeric-array and signal functions; named typed For/While/Boolean Case/embedded SubVI contracts; numeric input/output indexing, conditional collection, array concatenation, initialized/uninitialized stacked shift registers and feedback; cooperative nested execution, nested breakpoints, step-over/step-into and named-output probes; actual-body previews, compact terminals, Quick Drop cursor placement, staged connector editing, panel controls, transactions, bounded history and version-3 JSON with version-1 migration.
+        Seven value kinds including typed errors and complex doubles; arithmetic, comparison, Boolean, Unicode string, numeric-array and signal functions; typed loops/tunnels, numeric indexing and stacked shift registers; multi-frame Boolean/numeric/string/error Cases, sequences and typed locals; bounded compiled scalar Formula Nodes with control flow; nested debugging and a modeless cross-VI probe table; staged editors, terminal creation, compact geometry, Quick Drop, transactions, bounded history and format-3 JSON with version-1/2 migration.
 
         REMAINING COMPATIBILITY
-        NI VI/control/project formats and external VI dependency loading; the full G language and type/coercion system, integer widths, clusters, variants, references, general and multidimensional arrays, event/sequence structures, queues/channels, polymorphic VIs and libraries; exact NI scheduling, reentrancy, compiler and plugin systems; NI-DAQmx, VISA and instrument drivers; physical acquisition, FPGA and real-time targets; every control, palette, dialog, option, shortcut, native floating window and pixel-identical styling.
+        NI VI/control/project formats and external VI dependency loading; the full G language/type/coercion system, integer widths, general clusters, variants, references and multidimensional arrays; event structures, queues/channels, polymorphic and reentrant VIs; exact NI scheduling/compiler/plugins; NI-DAQmx/VISA/drivers, physical acquisition, FPGA and real-time targets; every control, palette, dialog, native floating window and pixel-identical styling.
 
-        Collection indexing currently handles numeric scalars and numeric 1D arrays, not arbitrary element/rank types. Strings are managed Unicode with explicit UTF-8 byte length; this is not full NI byte-string/PCRE2 compatibility. Case selectors are Boolean. SubVI bodies are embedded, not externally linked or recursive.
+        Indexed collections remain numeric 1D; strings are managed Unicode rather than full NI byte-string/PCRE2 semantics. Formula syntax is a bounded double-scalar subset, not the full C/NI Formula language. SubVIs are embedded rather than externally linked. Debugger overrides are session-only, not NI .lvprojstate persistence. Retained probe values are historical observations, not current hardware measurements.
 
         EXECUTION AND SECURITY
         Acquisition is simulated. This runtime is not validated for physical equipment, safety-critical control or hard real time. JSON does not execute script or load plugins. Imports, sample counts, nesting and execution are bounded. Pending feedback/register state commits after successful root execution; arbitrary side effects and random-generator state are not transactional. Rendering uses Skia through Uno, with host-dependent hardware acceleration or fallback. Dataflow/DSP run in managed C#, not WebGPU compute.

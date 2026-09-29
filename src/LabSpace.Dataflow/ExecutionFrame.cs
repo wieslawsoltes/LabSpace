@@ -23,6 +23,7 @@ public sealed class ExecutionFrame
     public string? LastNodeId { get; private set; }
     public int EvaluatedNodes => _budget.Evaluated;
     public double ElapsedMilliseconds => _watch.Elapsed.TotalMilliseconds;
+    public ExecutionFrame? ChildFrame => _structure?.Child;
     public ExecutionFrame ActiveFrame => _structure?.Child?.ActiveFrame ?? this;
     public Node? NextNode => _next < Graph.Order.Count ? Graph.Order[_next].Model : null;
     public bool IsInsideStructure => _structure is not null;
@@ -111,5 +112,6 @@ public sealed class ExecutionFrame
             if (node.Sources.TryGetValue("x", out var source)) _pending[Path + "/" + node.Model.Id] = GetOutput(source.NodeId, source.Output);
         if (_root) _runtime.Commit(_pending);
         Completed = true;
+        _runtime.ObserveCompletedFrame(this);
     }
 }

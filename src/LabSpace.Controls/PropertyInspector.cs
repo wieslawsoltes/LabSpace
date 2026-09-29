@@ -15,7 +15,7 @@ public sealed class PropertyInspector : ScrollViewer, IDisposable
     {
         _session = session; Content = _fields; HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled; session.Changed += Changed; Rebuild();
     }
-    private void Changed(SessionChange change) { if ((change & (SessionChange.Document | SessionChange.Selection | SessionChange.Navigation)) != 0) Rebuild(); }
+    private void Changed(SessionChange change) { if ((change & (SessionChange.Document | SessionChange.Selection | SessionChange.Navigation | SessionChange.Debug)) != 0) Rebuild(); }
     private void Apply(Action action) { try { action(); } catch (Exception e) { _session.Message(e.Message); } }
     private void Field(string label, string value, Action<string> commit)
     {
@@ -32,7 +32,7 @@ public sealed class PropertyInspector : ScrollViewer, IDisposable
             if (_session.SelectedWire is not null)
             {
                 var wire = _session.Diagram.Wires.First(w => w.Id == _session.SelectedWire); _fields.Children.Add(LabTheme.Text("Wire properties", 14)); _fields.Children.Add(LabTheme.Text("Input: " + wire.Input));
-                _fields.Children.Add(new LabButton(wire.Probe ? "Remove probe" : "Attach probe", _session.ToggleProbe, flat: false)); _fields.Children.Add(new LabButton("Delete wire", () => Apply(_session.Delete), flat: false));
+                _fields.Children.Add(new LabButton(_session.IsProbe(wire) ? "Remove probe" : "Attach probe", _session.ToggleProbe, flat: false)); _fields.Children.Add(new LabButton("Delete wire", () => Apply(_session.Delete), flat: false));
             }
             else
             {
@@ -70,7 +70,7 @@ public sealed class PropertyInspector : ScrollViewer, IDisposable
             _fields.Children.Add(new LabButton("Edit " + (node.Kind == "case" ? "TRUE branch" : "body"), () => _session.Enter(id), flat: false));
             if (node.Kind == "case") _fields.Children.Add(new LabButton("Edit FALSE branch", () => _session.Enter(id, true), flat: false));
         }
-        _fields.Children.Add(new LabButton(node.Breakpoint ? "Remove breakpoint" : "Set breakpoint", _session.ToggleBreakpoint, flat: false));
+        _fields.Children.Add(new LabButton(_session.IsBreakpoint(node) ? "Remove breakpoint" : "Set breakpoint", _session.ToggleBreakpoint, flat: false));
         var panel = _session.Path.Count == 0 ? _session.Instrument.Panel.FirstOrDefault(p => p.NodeId == id) : null;
         if (panel is not null)
         {

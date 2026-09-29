@@ -36,7 +36,26 @@ Supported operators: `+ - * / % **`, comparisons, `! && ||`, and lazy `?:`. Pare
 
 Supported functions: `sin`, `cos`, `tan`, `asin`, `acos`, `atan`, `atan2`, `sqrt`, `abs`, `exp`, `ln`, `log`, `log10`, `log2`, `floor`, `ceil`, `round`, `trunc`, `min`, `max`, `pow`, `clamp`, `sinh`, `cosh`, `tanh`. Constants: `pi`, `e`. `ln` is natural logarithm; `log`/`log10` use base 10; `log2` uses base 2.
 
-Limits: 16,384 source characters, 4,096 tokens, 2,048 instructions, 64 expression nesting levels, 256 scalar variable slots, 32 inputs and 32 outputs. Execution is forward-only bytecode retained in the compiled graph. Division/remainder by zero and non-finite results fail the frame. Arrays, C declarations/control flow, loops, units, native calls and external code/I/O are not supported by this subset.
+Control flow supports `if`/`else`, `for`, `while`, `do`/`while`, `break`, `continue`, lexical blocks, `double`/`float64` declarations, compound assignments and prefix/postfix increment/decrement statements. Inputs remain read-only. Definite-assignment analysis merges reachable branches and accounts for loop exits; local slots are reset on re-entry. Declarations are scalar doubles, not the full C type system. Side effects inside arbitrary expressions and switch/return statements are not supported.
+
+**Formula Control Flow.vi** supplies count=10 and gain=2 to:
+
+```c
+// Skip one sample; no hardware or external code is evaluated.
+double total = 0;
+double used = 0;
+for (double i = 0; i < count; i++) {
+    if (i == 3) continue;
+    total += i * gain;
+    used++;
+}
+result = total;
+iterations = used;
+```
+
+The independent outputs are 84 and 9. A probe on `result` demonstrates the modeless Debug window and retained values after switching to another VI.
+
+Limits: 16,384 source characters, 4,096 tokens, 2,048 emitted instructions, 64 nesting levels, 256 scalar variable slots, 32 inputs and 32 outputs. Compiled bytecode is retained in the graph plan. Each evaluation has instruction fuel (65,536 by default, at most 1,000,000) and checks cancellation before execution and periodically during interpretation. Budget exhaustion, division/remainder by zero and non-finite results fail the frame without committing its pending register state. Individual formula evaluations do not yield to the browser event loop. Arrays, general C declarations/types, units, native calls and external code/I/O remain unsupported.
 
 ## Error clusters and complex values
 

@@ -16,13 +16,17 @@ Build front panels, connect typed block diagrams, inspect live values and run si
 
 ![LabSpace front panel](https://wieslawsoltes.github.io/LabSpace/screenshots/front-panel.png)
 
-## 0.3 — Multi-frame programs, formulas and typed instrumentation
+## 0.3 — Structured programs and cross-VI debugging
 
 **0.3.0-alpha.1** adds executable numeric/string/Boolean/error Case Structures, ordered sequence frames and typed sequence locals, a compiled scalar Formula Node, error-cluster and complex-number controls and functions. Staged editors validate changes before Apply, named terminals support right-click creation and branching, and nested debugging includes step-out. Structure frame selectors, actual-body previews and resize handles are shared by the desktop and browser editors.
 
 Open **Case Dispatch.vi**: the command `run` selects a frame producing `42`. Open **Sequence Pipeline.vi**: an earlier frame writes `21`, a later formula computes `84`. **Errors and Complex.vi** displays a real typed error cluster and computes the magnitude of `3 + 4i` as `5`. Edit their case labels, formula, error code/source or real/imaginary components to change actual results. These are executable diagrams, not animations.
 
-[Advanced structures guide](docs/advanced-structures.md) · [Typed loops and registers](docs/typed-structures.md) · [Compatibility ledger](docs/compatibility.md)
+**Formula Control Flow.vi** evaluates a bounded `for` loop with `continue` into separately wired results `84` and `9`. Open **View → Debug window** to inspect its probe, switch to another VI and use **Locate** to return. Debugging flags and probe/breakpoint overrides are session state: toggling them does not dirty source or create Undo records.
+
+![Cross-VI Debug window](https://wieslawsoltes.github.io/LabSpace/screenshots/debug-window.png)
+
+[Debugger guide](docs/debugger.md) · [Advanced structures guide](docs/advanced-structures.md) · [Typed loops and registers](docs/typed-structures.md) · [Compatibility ledger](docs/compatibility.md)
 
 ![Sequence with executable frames](https://wieslawsoltes.github.io/LabSpace/screenshots/sequence.png)
 
@@ -36,7 +40,7 @@ LabSpace is a working independent implementation inspired by the classic NI LabV
 | Front panel | Numeric controls, knobs, sliders, gauges, switches, LEDs, strings, numeric arrays, waveform graphs/charts, cursors, positioning and resizing |
 | Diagram | Typed named terminals, single-driver input wiring, output fan-out, drag/marquee selection, pan/zoom, duplication, deletion, probes and undo/redo |
 | Structures | Multi-case dispatch, sequential frames/locals, For/While/Boolean Case/embedded SubVI contracts; typed ordinary tunnels; numeric input/output indexing; conditional collection; array concatenation; stacked register state |
-| Execution | Cached topological plans, explicit feedback, cooperative nested activations, shared budgets, run/continuous/pause/abort, step-over/step-into and nested breakpoints |
+| Execution | Cached topological plans, explicit feedback, cooperative nested activations, shared budgets, run/continuous/pause/abort, step-over/step-into and nested breakpoints, scoped cross-VI probes and session-only debug options |
 | Functions | Arithmetic/transcendentals, Boolean logic, typed Select, Unicode string transforms, numeric array transforms, waveform construction, simulated signals, filtering, RMS, peak-to-peak FFT, compiled scalar formulas, errors and complex arithmetic |
 | Documents | Version-3 JSON, version-1/2 migration, source-generated serialization, bounded imports/history, waveform CSV, browser IndexedDB and native recovery |
 
@@ -59,7 +63,7 @@ Run `tools/LabSpace.Benchmarks` for reproducible engine/FFT timing and allocatio
 | Package | Responsibility |
 | --- | --- |
 | `LabSpace.Core` | Models, immutable typed values, node catalog, named terminals and immutable structure contracts |
-| `LabSpace.Signals` | Signal generation, transformations, filtering, stable RMS FFT, compiled scalar formulas, errors and complex arithmetic |
+| `LabSpace.Signals` | Signal generation, transformations, filtering, stable RMS and FFT |
 | `LabSpace.Dataflow` | Graph validation/compilation, named-output execution, nested activations, register/feedback state and budgets |
 | `LabSpace.Documents` | Versioned source-generated JSON, validation/migration and executable examples |
 | `LabSpace.Editing` | UI-independent editing, transactions, history, wiring, connector synchronization and debugging session |

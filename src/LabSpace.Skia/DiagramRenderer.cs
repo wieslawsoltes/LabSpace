@@ -34,7 +34,7 @@ public sealed class DiagramRenderer(LabFonts fonts) : IDisposable
             if (session.SelectedWire == wire.Id) _d.Path(c, geometry.Path, LabDrawing.Color("#92BDEC"), 6);
             _d.Path(c, geometry.Path, geometry.Color, geometry.Width);
             var points = geometry.Points;
-            if (wire.Probe)
+            if (session.IsProbe(wire))
             {
                 var p = points[Math.Min(2, points.Length - 1)]; var value = session.OutputValue(wire.From, wire.Output)?.ToString() ?? "not executed";
                 var box = new SKRect(p.X + 7, p.Y - 25, p.X + 145, p.Y - 4); _d.Bevel(c, box, "#FFFFDA"); _d.Text(c, value.Length > 22 ? value[..21] + "…" : value, box.Left + 5, box.Top + 15, 11);
@@ -82,7 +82,7 @@ public sealed class DiagramRenderer(LabFonts fonts) : IDisposable
     {
         if (!NodeCatalog.TryGet(n.Kind, out var def)) { _d.Bevel(c, b, "#FFE1E1"); _d.Text(c, "Unknown function", b.Left + 4, b.MidY); return; }
         def = NodeCatalog.Resolve(n);
-        var selected = session.Selection.Contains(n.Id); var active = session.ActiveNode == n.Id && (session.Highlight || session.IsPaused);
+        var selected = session.Selection.Contains(n.Id); var active = session.ActiveNode == n.Id && session.DebugFrame?.Path == session.VisibleDebugPath && (session.Highlight || session.IsPaused);
         if (active) { var glow = b; glow.Inflate(7, 7); _d.Rect(c, glow, LabDrawing.Color("#FFF085")); }
         var label = n.Label.Length > 28 ? n.Label[..26] + "…" : n.Label;
         var labelX = def.IsControl ? b.Left - 8 - _d.Font(13).MeasureText(label) : def.IsIndicator ? b.Right + 8 : b.Left;
@@ -148,7 +148,7 @@ public sealed class DiagramRenderer(LabFonts fonts) : IDisposable
             if (n.Contract?.Registers.Any(r => r.Name == output.Name) == true) DrawRegister(c, p, output.Kind);
             if (def.IsStructure || n.Kind == "formula" || selected) _d.Text(c, output.Name, p.X - 9 - _d.Font(9).MeasureText(output.Name), p.Y - 6, 9, "#525252");
         }
-        if (n.Breakpoint) { _d.Circle(c, b.Left - 11, b.Top - 12, 6, LabDrawing.Color("#B52922")); _d.Circle(c, b.Left - 11, b.Top - 12, 6, SKColors.White, false); }
+        if (session.IsBreakpoint(n)) { _d.Circle(c, b.Left - 11, b.Top - 12, 6, LabDrawing.Color("#B52922")); _d.Circle(c, b.Left - 11, b.Top - 12, 6, SKColors.White, false); }
         if (session.Diagnostics.Any(d => d.NodeId == n.Id)) { _d.Line(c, b.Left, b.Bottom + 4, b.Right, b.Bottom + 4, LabDrawing.Color("#BD2727"), 2); }
         if (selected) _d.Selection(c, b);
     }

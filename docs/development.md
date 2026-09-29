@@ -54,3 +54,7 @@ Selection and geometry changes must not repeatedly compile the graph. Inspectors
 Run `dotnet run --project tools/LabSpace.Benchmarks -c Release` for managed engine/FFT timing and allocation measurements. Compare on the same machine/runtime; the results do not measure GPU or UI frame time.
 
 Put models/types and catalog definitions in Core, DSP in Signals, validation/execution in Dataflow, serialization in Documents, transactions in Editing, rendering in Skia, input/components in Controls and composition in Workbench. Use immutable contracts with `NodeCatalog.Resolve(node)` for instance-specific ports. Bump the native document format for breaking schema changes and add invalid-input, round-trip, cancellation and undo tests. Keep platform services behind injected interfaces such as `IProjectStorage` rather than browser globals inside engines.
+
+## Cross-VI debugging and browser-storage validation
+
+See [Debugger](debugger.md) for session-only overrides, scoped retained values, activation navigation, bounds and reusable controls. Run `npm run test:storage` for dependency-free IndexedDB connection/transaction and file-picker lifecycle regressions. Recovery writes are acknowledged only when the transaction commits; malformed saved records are rejected rather than replaced with an empty project. Browsers remain subject to storage quota/eviction: keep explicit project saves.
