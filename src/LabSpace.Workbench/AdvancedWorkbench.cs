@@ -14,6 +14,7 @@ public sealed partial class InstrumentWorkbench
     private FormulaEditorControl? _formulaEditor;
     private void InitializeAdvanced(StackPanel tools)
     {
+        Inspector.EditorRequested += EditNode; Inspector.FramesRequested += OpenFrames;
         tools.Children.Add(Command("frames-edit", "Cases and sequence frames", () =>
         {
             if (Session.SelectedNode is { } node && StructureFrames.HasFrames(node)) OpenFrames(node);
@@ -24,7 +25,7 @@ public sealed partial class InstrumentWorkbench
             if (Session.SelectedNode is { Kind: "formula" } node) OpenFormula(node);
             else Session.Message("Select a Formula Node first.");
         }, "formula"));
-        tools.Children.Add(Command("step-out", "Step out (Ctrl+F11)", Session.StepOut, "↑"));
+        tools.Children.Add(Command("step-out", "Step out (Ctrl+F11)", Session.StepOut, "step-out"));
         _viewTabs.Children.Add(Command("previous-frame", "◀ Previous frame", () => ChangeFrame(-1), null, true, true));
         _viewTabs.Children.Add(Command("next-frame", "Next frame ▶", () => ChangeFrame(1), null, true, true));
         BlockDiagram.ContextRequested += OpenDiagramContext;

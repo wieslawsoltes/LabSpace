@@ -10,6 +10,15 @@ public static class IconPainter
         c.Save(); c.Translate(r.Left, r.Top); c.Scale(r.Width / 24, r.Height / 24); var ink = LabDrawing.Color("#424242");
         switch (name)
         {
+            case "frames":
+                d.Rect(c, 3, 6, 16, 15, "#FFFFFF"); d.Border(c, new(3, 6, 19, 21), ink);
+                d.Line(c, 7, 3, 22, 3, ink); d.Line(c, 22, 3, 22, 17, ink); d.Rect(c, 4, 7, 14, 3, "#C5D6E5");
+                d.Text(c, "0", 11, 18, 10, "#424242", true); break;
+            case "formula":
+                d.Rect(c, 2, 3, 20, 18, "#FFFFFF"); d.Border(c, new(2, 3, 22, 21), ink); d.Text(c, "f(x)", 12, 17, 12, "#424242", true); break;
+            case "step-out":
+                d.Line(c, 5, 19, 5, 5, ink, 1.6f); d.Line(c, 5, 5, 18, 5, ink, 1.6f);
+                d.Line(c, 18, 5, 13, 1, ink, 1.6f); d.Line(c, 18, 5, 13, 10, ink, 1.6f); d.Rect(c, 2, 21, 20, 2, "#5A5A5A"); break;
             case "quick-drop":
                 d.Circle(c, 10, 9, 6, SKColors.White); d.Circle(c, 10, 9, 6, ink, false);
                 d.Line(c, 14, 14, 21, 21, ink, 2); d.Line(c, 10, 5, 10, 13, ink); d.Line(c, 6, 9, 14, 9, ink);

@@ -41,7 +41,14 @@ public sealed partial class InstrumentSession
     public IReadOnlyDictionary<string, Value> Values { get; private set; } = new Dictionary<string, Value>();
     public IReadOnlyDictionary<SourceTerminal, Value> OutputValues { get; private set; } = new Dictionary<SourceTerminal, Value>();
     public ExecutionFrame? DebugFrame => _frame?.ActiveFrame;
-    public Value? OutputValue(string node, string output = "result") => OutputValues.TryGetValue(new(node, output), out var value) ? value : output == "result" ? Values.GetValueOrDefault(node) : null;
+    public Value? OutputValue(string node, string output = "result")
+    {
+        // IDs are scoped to a diagram, so only expose an active child value for the visible model.
+        if (_path.Count > 0 && DebugFrame is { } active && Find(node) is { } model
+            && active.Graph.Order.Any(n => ReferenceEquals(n.Model, model)))
+            return active.Outputs.TryGetValue(new(node, output), out var nested) ? nested : output == "result" ? active.Values.GetValueOrDefault(node) : null;
+        return OutputValues.TryGetValue(new(node, output), out var value) ? value : output == "result" ? Values.GetValueOrDefault(node) : null;
+    }
     public Dictionary<string, Queue<double>> ChartHistory { get; } = [];
     public IReadOnlyList<Diagnostic> Diagnostics { get; private set; } = [];
     public long Revision { get; private set; }
@@ -159,7 +166,7 @@ public sealed partial class InstrumentSession
         {
             Diagram.Wires.RemoveAll(w => w.To == to && w.Input == input);
             Diagram.Wires.Add(new() { From = from, To = to, Input = input, Output = output });
-            var error = GraphCompiler.Validate(Diagram).FirstOrDefault(e => e.Code is "CYCLE" or "TYPE" or "DRIVER");
+            var error = GraphCompiler.Validate(Instrument.Diagram).FirstOrDefault(e => e.Code is "CYCLE" or "TYPE" or "DRIVER");
             if (error is not null) throw new ArgumentException(error.Message);
         }); Message("Wire connected");
     }

@@ -19,7 +19,7 @@ public sealed class FormulaProgram
         new("sin", 1, (s,i) => Math.Sin(s[i])), new("cos", 1, (s,i) => Math.Cos(s[i])), new("tan", 1, (s,i) => Math.Tan(s[i])),
         new("asin", 1, (s,i) => Math.Asin(s[i])), new("acos", 1, (s,i) => Math.Acos(s[i])), new("atan", 1, (s,i) => Math.Atan(s[i])),
         new("atan2", 2, (s,i) => Math.Atan2(s[i], s[i+1])), new("sqrt", 1, (s,i) => Math.Sqrt(s[i])), new("abs", 1, (s,i) => Math.Abs(s[i])),
-        new("exp", 1, (s,i) => Math.Exp(s[i])), new("log", 1, (s,i) => Math.Log(s[i])), new("log10", 1, (s,i) => Math.Log10(s[i])),
+        new("exp", 1, (s,i) => Math.Exp(s[i])), new("ln", 1, (s,i) => Math.Log(s[i])), new("log", 1, (s,i) => Math.Log10(s[i])), new("log2", 1, (s,i) => Math.Log2(s[i])), new("log10", 1, (s,i) => Math.Log10(s[i])),
         new("floor", 1, (s,i) => Math.Floor(s[i])), new("ceil", 1, (s,i) => Math.Ceiling(s[i])), new("round", 1, (s,i) => Math.Round(s[i])),
         new("trunc", 1, (s,i) => Math.Truncate(s[i])), new("min", 2, (s,i) => Math.Min(s[i], s[i+1])), new("max", 2, (s,i) => Math.Max(s[i], s[i+1])),
         new("pow", 2, (s,i) => Math.Pow(s[i], s[i+1])), new("clamp", 3, (s,i) => Math.Clamp(s[i], s[i+1], s[i+2])),
@@ -82,6 +82,7 @@ public sealed class FormulaProgram
         private Token Current => _tokens[Math.Min(_at, _tokens.Count - 1)];
         public Parser(string source, FormulaSignature signature)
         {
+            ArgumentNullException.ThrowIfNull(source); ArgumentNullException.ThrowIfNull(signature);
             if (source.Length > 16384) throw new FormulaException("Formula exceeds 16,384 characters", 0);
             if (signature.Inputs.IsDefault || signature.Outputs.IsDefault || signature.Inputs.Length > 32 || signature.Outputs.Length is < 1 or > 32)
                 throw new FormulaException("Formula requires at most 32 inputs and 1–32 outputs", 0);
@@ -102,6 +103,7 @@ public sealed class FormulaProgram
                 {
                     var name = Current.Text;
                     if (!StructureFrames.Identifier(name) || name is "pi" or "e") throw Error("Expected an assignment identifier");
+                    if (_signature.Inputs.Contains(name)) throw Error("Input variables are read-only");
                     _at++; Expect("="); Expression();
                     if (!_variables.TryGetValue(name, out var slot)) { slot = _variables.Count; _variables.Add(name, slot); }
                     if (_variables.Count > 256) throw Error("Formula variable budget exceeded");

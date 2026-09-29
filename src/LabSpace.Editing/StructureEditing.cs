@@ -41,7 +41,7 @@ public sealed partial class InstrumentSession
                 {
                     var existing = node.Frames.SelectMany(f => f.Diagram.Nodes).Where(n => n.Kind == "output").Select(GraphCompiler.ConnectorName).ToHashSet(StringComparer.Ordinal);
                     foreach (var output in contract.Outputs.Where(o => !existing.Contains(o.Name)))
-                        node.Frames[^1].Diagram.Nodes.Add(StructuredExamples.Connector("output", output.Name, output.Type, 620, 40 + existing.Count * 90));
+                        { node.Frames[^1].Diagram.Nodes.Add(StructuredExamples.Connector("output", output.Name, output.Type, 620, 40 + existing.Count * 90)); existing.Add(output.Name); }
                 }
             }
             else

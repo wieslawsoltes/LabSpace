@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.3.0-alpha.1 — 2026-09-29
+
+- Add multi-case Boolean/numeric/string/error dispatch, validated labels/ranges/defaults and independent visible frames.
+- Add ordered sequence frames and typed one-writer locals available only to later frames.
+- Add bounded compiled scalar Formula Nodes with named outputs, short-circuit/lazy branches and source-position diagnostics.
+- Add immutable error clusters and complex doubles, typed kernels, and front-panel controls/indicators.
+- Add staged case/sequence/formula/value editors, classic vector icons, frame navigation, terminal creation/branching and resize gestures.
+- Add nested step-out and root execution while editing sequence frames.
+- Migrate version-1/2 documents to format 3; preserve legacy loops and embedded SubVIs.
+- Add executable Case Dispatch, Sequence Pipeline, and Errors and Complex examples plus engine/editing/browser regression suites.
+
+
+
 ## 0.2.0-alpha.1
 
 - Named typed input/output contracts for For, While, Boolean Case and embedded SubVI structures.

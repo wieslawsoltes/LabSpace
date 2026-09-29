@@ -8,6 +8,8 @@ public sealed class PropertyInspector : ScrollViewer, IDisposable
 {
     private readonly InstrumentSession _session;
     public event Action<Node>? StructureRequested;
+    public event Action<Node>? EditorRequested;
+    public event Action<Node>? FramesRequested;
     private readonly StackPanel _fields = new() { Padding = new Thickness(10), Spacing = 7 };
     public PropertyInspector(InstrumentSession session)
     {
@@ -42,14 +44,18 @@ public sealed class PropertyInspector : ScrollViewer, IDisposable
         var id = node.Id; var definition = NodeCatalog.Resolve(node); _fields.Children.Add(LabTheme.Text(definition.Title, 16));
         Field("Label", node.Label, text => _session.Edit(() => _session.Find(id)!.Label = text, false));
         if (node.Kind is "constant" or "control" or "bool" or "bool-control" or "feedback") Field("Value", node.Value.ToString("G17", CultureInfo.InvariantCulture), text => _session.SetValue(id, Number(text)));
-        if (node.Kind is "string" or "string-control" or "array" or "input" or "output" or "simulate") Field(node.Kind == "simulate" ? "Waveform (Sine / Square / Triangle)" : "Text", node.Text, text => _session.SetText(id, text));
-        if (node.Kind is "input" or "output")
+        if (node.Kind is "string" or "string-control" or "array" or "input" or "output" or "sequence-read" or "sequence-write" or "simulate") Field(node.Kind == "simulate" ? "Waveform (Sine / Square / Triangle)" : "Text", node.Text, text => _session.SetText(id, text));
+        if (node.Kind is "input" or "output" or "sequence-read" or "sequence-write")
         {
             var type = new ComboBox { ItemsSource = Enum.GetNames<ValueKind>(), SelectedItem = node.DataType.ToString(), FontSize = 12, MinHeight = 28 };
             type.SelectionChanged += (_, _) => { if (type.SelectedItem is string value && value != node.DataType.ToString()) Apply(() => _session.Edit(() => _session.Find(id)!.DataType = Enum.Parse<ValueKind>(value))); };
             _fields.Children.Add(LabTheme.Text("Connector type", 11)); _fields.Children.Add(type);
         }
-        foreach (var parameter in node.Parameters.ToArray())
+        if (node.Kind is "formula" or "error-control" or "error-constant" or "complex" or "complex-control")
+            _fields.Children.Add(new LabButton("Edit value or formula…", () => EditorRequested?.Invoke(node), flat: false));
+        if (StructureFrames.HasFrames(node))
+            _fields.Children.Add(new LabButton("Cases and sequence frames…", () => FramesRequested?.Invoke(node), flat: false));
+        foreach (var parameter in node.Parameters.Where(p => p.Key != "caseInsensitive").ToArray())
         {
             var key = parameter.Key; Field(key, parameter.Value.ToString("G17", CultureInfo.InvariantCulture), text => _session.Edit(() => _session.Find(id)!.Parameters[key] = Number(text), false));
         }
@@ -69,7 +75,7 @@ public sealed class PropertyInspector : ScrollViewer, IDisposable
         if (panel is not null)
         {
             _fields.Children.Add(LabTheme.Separator(false)); _fields.Children.Add(LabTheme.Text("Front-panel appearance", 13));
-            var choices = definition.Output switch { ValueKind.Number => new[] { "Numeric", "Knob", "Slider", "Gauge" }, ValueKind.Boolean => new[] { "Switch", "LED" }, ValueKind.String => new[] { "String" }, ValueKind.Array => new[] { "Array" }, _ => new[] { "Graph", "Chart" } };
+            var choices = definition.Output switch { ValueKind.Number => new[] { "Numeric", "Knob", "Slider", "Gauge" }, ValueKind.Boolean => new[] { "Switch", "LED" }, ValueKind.String => new[] { "String" }, ValueKind.Array => new[] { "Array" }, ValueKind.Error => new[] { "Error" }, ValueKind.Complex => new[] { "Complex" }, _ => new[] { "Graph", "Chart" } };
             var combo = new ComboBox { ItemsSource = choices, SelectedItem = panel.Widget, HorizontalAlignment = HorizontalAlignment.Stretch, MinHeight = 28, FontSize = 12 };
             combo.SelectionChanged += (_, _) => { if (combo.SelectedItem is string widget && widget != panel.Widget) Apply(() => _session.Edit(() => { panel.Widget = widget; if (widget is "Knob" or "Gauge") panel.Bounds = panel.Bounds with { Height = Math.Max(180, panel.Bounds.Height) }; }, false)); }; _fields.Children.Add(combo);
             Field("Minimum", panel.Minimum.ToString(CultureInfo.InvariantCulture), text => _session.Edit(() => panel.Minimum = Number(text), false));

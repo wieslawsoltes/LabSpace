@@ -73,7 +73,7 @@ public sealed class FrontPanelSurface : CanvasViewport
         var p = ToWorld(e.GetCurrentPoint(Canvas).Position); var dx = p.X - _start.X; var dy = p.Y - _start.Y;
         if (_moving)
         {
-            _item.Bounds = _resize ? _bounds with { Width = Math.Max(80, Math.Round((_bounds.Width + dx) / 10) * 10), Height = Math.Max(_item.Widget is "Knob" or "Gauge" or "Graph" or "Chart" ? 140 : 70, Math.Round((_bounds.Height + dy) / 10) * 10) } : _bounds with { X = Math.Round((_bounds.X + dx) / 10) * 10, Y = Math.Round((_bounds.Y + dy) / 10) * 10 };
+            _item.Bounds = _resize ? _bounds with { Width = Math.Max(_item.Widget is "Error" or "Complex" ? 220 : 80, Math.Round((_bounds.Width + dx) / 10) * 10), Height = Math.Max(_item.Widget == "Error" ? 160 : _item.Widget == "Complex" ? 110 : _item.Widget is "Knob" or "Gauge" or "Graph" or "Chart" ? 140 : 70, Math.Round((_bounds.Height + dy) / 10) * 10) } : _bounds with { X = Math.Round((_bounds.X + dx) / 10) * 10, Y = Math.Round((_bounds.Y + dy) / 10) * 10 };
             Invalidate();
         }
         else if (_operating)

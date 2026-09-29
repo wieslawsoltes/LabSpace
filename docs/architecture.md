@@ -91,3 +91,12 @@ Engine tests cover calculations, compilation, migration, transactions, named out
 Three-OS desktop builds, browser acceptance and source-provenance checks gate Pages. The same interactions run against the deployed application. Release packaging audits all nine libraries and matching native Skia assets. `tools/LabSpace.Benchmarks` records engine/FFT timings and allocation counts with machine/runtime metadata; those measurements do not represent GPU draw time, UI frame time or other machines.
 
 Full G types, linked/reentrant VIs, driver systems, native compilation and FPGA/real-time execution remain distinct future implementations, not capabilities implied by these abstractions. See [compatibility](compatibility.md).
+
+
+## Advanced execution (0.3)
+
+`CaseDispatchTable` compiles bounded label sets into immutable dispatch patterns with overlap/default validation. `CompiledNode.Frames` holds each independently validated child plan. Sequence compilation threads a typed local-symbol environment from writer frames into later reader frames; output ownership is unique across frames. `StructureActivation` creates child frames with stable frame-ID invocation paths, propagates locals after child completion and delays external sequence outputs until all children finish.
+
+`FormulaProgram` compiles a bounded scalar subset into forward-only bytecode. It tracks definitely assigned variables, checks names/arity/depth/token/instruction budgets, and implements short-circuit and ternary operators with forward branches. Programs are retained in graph plans; evaluation has isolated scalar slots and validates finite outputs. There is no native-code evaluation or ambient I/O.
+
+`ErrorCluster` and complex values extend immutable runtime values, defaults, named output kernels, wiring validation and rendering. Formats 1/2 migrate to 3. Staged editors own deep drafts; signatures/labels are validated before edits, and undo snapshots restore diagrams, connectors and external wires atomically. Frame visibility affects preview caching, never runtime dispatch. Root compilation remains authoritative when editing nested frames.

@@ -73,6 +73,7 @@ public sealed partial class InstrumentSession
     {
         _ = Value.ErrorValue(status, code, source);
         var node = Find(nodeId) ?? throw new ArgumentException("Node not found.");
+        if (node.Kind is not ("error-control" or "error-constant")) throw new ArgumentException("Select an editable error cluster.");
         Edit(() => { node.Value = code; node.Text = source; node.Parameters["status"] = status ? 1 : 0; }, false);
     }
     public static string? TerminalKind(ValueKind kind, TerminalCreation creation) => (kind, creation) switch
@@ -109,8 +110,14 @@ public sealed partial class InstrumentSession
         });
         Select(node.Id); return node;
     }
-    public void DisconnectTerminal(string nodeId, string port, bool output) => Edit(() =>
-        Diagram.Wires.RemoveAll(w => output ? w.From == nodeId && w.Output == port : w.To == nodeId && w.Input == port));
+    public void DisconnectTerminal(string nodeId, string port, bool output)
+    {
+        var definition = NodeCatalog.Resolve(Find(nodeId) ?? throw new ArgumentException("Node not found."));
+        var name = output ? definition.FindOutput(port)?.Name : port;
+        Edit(() => Diagram.Wires.RemoveAll(w => output
+            ? w.From == nodeId && definition.FindOutput(w.Output)?.Name == name
+            : w.To == nodeId && w.Input == port));
+    }
     public void StepOut()
     {
         if (_frame is null || !IsPaused) { Message("Pause inside a structure before stepping out."); return; }

@@ -78,3 +78,8 @@ Some browser/OS shortcuts take precedence. Equivalent toolbar/menu actions remai
 Simulated sources support sine, square and triangle waveforms with optional deterministic noise. Frequency must not exceed Nyquist. Moving Average is causal but block-local. RMS is scaled to avoid unnecessary overflow. FFT uses a periodic Hann window and coherent-gain-corrected one-sided amplitudes; its sample count must be a power of two.
 
 This is a usable independent subset, not complete NI binary, G-language, hardware, GPU-compute, FPGA or real-time compatibility. See the [compatibility ledger](compatibility.md) before adopting it for a workflow.
+
+
+## Multi-frame programming and typed values (0.3)
+
+See [advanced structures](advanced-structures.md) for executable cases/sequences, staged frame and formula editors, error/complex controls, terminal context creation and step-out. New projects include seven examples. Existing recovery projects retain their own examples; use **File → Load example project** after saving work to load the expanded example collection.

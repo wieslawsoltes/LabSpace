@@ -34,6 +34,7 @@ public sealed class CaseDispatchTable
             foreach (var label in Split(item.Label))
             {
                 if (label.Length == 0) continue;
+                if (patterns.Count >= 256) throw new ArgumentException("At most 256 case selector terms are supported.");
                 if (node.DataType == ValueKind.Boolean)
                 {
                     if (!bool.TryParse(label, out var boolean)) throw new ArgumentException("Boolean cases use True or False labels.");
