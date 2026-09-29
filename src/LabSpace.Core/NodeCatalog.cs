@@ -6,9 +6,9 @@ public sealed record NodeDefinition(string Kind, string Title, string Category, 
 {
     public OutputDefinition[] Outputs { get; init; } = HasOutput ? [new("result", Output)] : [];
     public OutputDefinition? FindOutput(string name) => Outputs.FirstOrDefault(p => p.Name == name) ?? (name == "result" && Outputs.Length > 0 ? Outputs[0] : null);
-    public bool IsControl => Kind is "control" or "bool-control" or "string-control";
-    public bool IsIndicator => Kind is "indicator" or "bool-indicator" or "string-indicator" or "graph" or "chart" or "array-indicator";
-    public bool IsStructure => Kind is "for" or "while" or "case" or "subvi";
+    public bool IsControl => Kind is "control" or "bool-control" or "string-control" or "error-control" or "complex-control";
+    public bool IsIndicator => Kind is "indicator" or "bool-indicator" or "string-indicator" or "graph" or "chart" or "array-indicator" or "error-indicator" or "complex-indicator";
+    public bool IsStructure => Kind is "for" or "while" or "case" or "subvi" or "case-multi" or "sequence";
 }
 
 public static class NodeCatalog
@@ -77,6 +77,7 @@ public static class NodeCatalog
         Add("case", "Case Structure", "Structures", "CASE", "Executes only the selected branch. TRUE uses Body; FALSE uses Alternative. Supports named typed tunnels.", ValueKind.Number, true, B("selector"), N("initial", false));
         Add("subvi", "SubVI", "Structures", "VI", "Executes an embedded reusable diagram with a named typed connector contract. Double-click to edit the body.", ValueKind.Number, true, N("x", false));
         ExtendedNodeCatalog.Append(result);
+        result.AddRange(AdvancedNodeCatalog.All);
         return result;
     }
 }

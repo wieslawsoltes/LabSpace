@@ -54,7 +54,7 @@ public sealed class FrontPanelSurface : CanvasViewport
         else if (def.IsControl)
         {
             if (node.Kind == "bool-control") Safe(() => Session.SetValue(node.Id, node.Value == 0 ? 1 : 0));
-            else if (node.Kind == "string-control") EditRequested?.Invoke(node);
+            else if (node.Kind is "string-control" or "error-control" or "complex-control") EditRequested?.Invoke(node);
             else if (_item.Widget is "Knob" or "Slider") { Session.BeginGesture(); _operating = true; Canvas.CapturePointer(e.Pointer); }
             else if (_start.X < _bounds.X + 15)
             {

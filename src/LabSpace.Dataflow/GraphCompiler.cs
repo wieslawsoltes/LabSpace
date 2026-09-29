@@ -8,21 +8,27 @@ public sealed class GraphValidationException(IReadOnlyList<Diagnostic> diagnosti
     public IReadOnlyList<Diagnostic> Diagnostics { get; } = diagnostics;
 }
 public readonly record struct SourceTerminal(string NodeId, string Output);
-public sealed record CompiledNode(Node Model, NodeDefinition Definition, IReadOnlyDictionary<string, SourceTerminal> Sources, CompiledGraph? Body, CompiledGraph? Alternative);
+public sealed record CompiledNode(Node Model, NodeDefinition Definition, IReadOnlyDictionary<string, SourceTerminal> Sources, CompiledGraph? Body, CompiledGraph? Alternative)
+{
+    public IReadOnlyList<CompiledGraph> Frames { get; init; } = [];
+    public CaseDispatchTable? Cases { get; init; }
+    public FormulaProgram? Formula { get; init; }
+}
 public sealed record CompiledGraph(IReadOnlyList<CompiledNode> Order)
 {
     public IReadOnlyDictionary<string, string> ConnectorOutputs { get; init; } = new Dictionary<string, string>();
     public string? ConditionNode { get; init; }
+    public IReadOnlyDictionary<string, string> LocalOutputs { get; init; } = new Dictionary<string, string>();
 }
 
-public static class GraphCompiler
+public static partial class GraphCompiler
 {
     public static IReadOnlyList<Diagnostic> Validate(Diagram graph)
     {
         try { Compile(graph); return []; } catch (GraphValidationException e) { return e.Diagnostics; }
     }
     public static CompiledGraph Compile(Diagram graph) => Compile(graph, 0, new(ReferenceEqualityComparer.Instance), null);
-    private static CompiledGraph Compile(Diagram graph, int depth, HashSet<Diagram> ancestors, HashSet<string>? defaultOutputs)
+    private static CompiledGraph Compile(Diagram graph, int depth, HashSet<Diagram> ancestors, HashSet<string>? defaultOutputs, IReadOnlyDictionary<string, ValueKind>? sequenceLocals = null)
     {
         if (graph is null || depth > 12 || !ancestors.Add(graph)) throw new GraphValidationException([new("DEPTH", "Nested diagrams exceed the depth limit or contain recursive references.")]);
         var errors = new List<Diagnostic>();
@@ -38,6 +44,7 @@ public static class GraphCompiler
                 else
                 {
                     var before = errors.Count;
+                    ValidateAdvancedNode(node, sequenceLocals, errors);
                     if (node.Contract is not null) ValidateContract(node, basis, errors);
                     if (errors.Count == before) definitions[node.Id] = NodeCatalog.Resolve(node);
                 }
@@ -67,7 +74,13 @@ public static class GraphCompiler
             while (ready.TryDequeue(out var id))
             {
                 var model = nodes[id]; var definition = definitions[id]; CompiledGraph? body = null, alternative = null;
-                if (definition.IsStructure)
+                IReadOnlyList<CompiledGraph> frames = []; CaseDispatchTable? cases = null;
+                if (StructureFrames.HasFrames(model))
+                {
+                    frames = CompileFrames(model, depth, ancestors, errors);
+                    if (model.Kind == "case-multi") cases = CaseDispatchTable.Compile(model);
+                }
+                else if (definition.IsStructure)
                 {
                     var defaults = model.Contract?.Outputs.Where(t => t.UseDefaultIfUnwired).Select(t => t.Name).ToHashSet(StringComparer.Ordinal);
                     if (model.Body is null) errors.Add(new("BODY", $"{model.Label}: structure body is missing.", id));
@@ -78,7 +91,11 @@ public static class GraphCompiler
                         else { alternative = Compile(model.Alternative, depth + 1, ancestors, defaults); ValidateBody(model, model.Alternative, errors); }
                     }
                 }
-                ordered.Add(new(model, definition, inputs[id], body, alternative));
+                ordered.Add(new(model, definition, inputs[id], body, alternative)
+                {
+                    Frames = frames, Cases = cases,
+                    Formula = model.Kind == "formula" ? FormulaProgram.Compile(model.Text, model.Formula ?? new()) : null
+                });
                 foreach (var target in edges[id]) if (--indegree[target] == 0) ready.Enqueue(target);
             }
             if (ordered.Count != nodes.Count) errors.Add(new("CYCLE", "Combinational cycle detected. Insert an explicit Feedback node to carry state between frames."));
@@ -86,7 +103,11 @@ public static class GraphCompiler
             foreach (var node in graph.Nodes.Where(n => n.Kind == "output"))
                 if (!connectors.TryAdd(ConnectorName(node), node.Id)) errors.Add(new("CONNECTOR", $"Duplicate output connector '{ConnectorName(node)}'.", node.Id));
             if (errors.Count != 0) throw new GraphValidationException(errors);
-            return new(ordered) { ConnectorOutputs = connectors, ConditionNode = graph.Nodes.FirstOrDefault(n => n.Kind == "stop")?.Id };
+            var localOutputs = new Dictionary<string, string>(StringComparer.Ordinal);
+            foreach (var node in graph.Nodes.Where(n => n.Kind == "sequence-write"))
+                if (!localOutputs.TryAdd(node.Text, node.Id)) errors.Add(new("LOCAL", $"Duplicate sequence local '{node.Text}'.", node.Id));
+            if (errors.Count != 0) throw new GraphValidationException(errors);
+            return new(ordered) { ConnectorOutputs = connectors, ConditionNode = graph.Nodes.FirstOrDefault(n => n.Kind == "stop")?.Id, LocalOutputs = localOutputs };
         }
         finally { ancestors.Remove(graph); }
     }
@@ -121,7 +142,7 @@ public static class GraphCompiler
         if (namesOut.Count > 0 && !namesOut.Contains(c.PrimaryOutput)) Error("Primary output must name an output tunnel or shift register.");
         if (c.ConditionalFor && node.Kind != "for") Error("A conditional For terminal can only be used on a For loop.");
     }
-    private static void ValidateBody(Node owner, Diagram body, List<Diagnostic> errors)
+    private static void ValidateBody(Node owner, Diagram body, List<Diagnostic> errors, bool requireAllOutputs = true)
     {
         void Error(string message, string? nodeId = null) => errors.Add(new("CONNECTOR", message, nodeId ?? owner.Id));
         var outputs = body.Nodes.Where(n => n.Kind == "output").ToArray();
@@ -150,6 +171,6 @@ public static class GraphCompiler
         foreach (var node in outputs)
             if (!expected.TryGetValue(ConnectorName(node), out var kind) || kind != node.DataType) Error($"Output connector '{ConnectorName(node)}' does not match the structure contract.", node.Id);
         foreach (var (name, _) in expected)
-            if (!outputs.Any(n => ConnectorName(n) == name) && !c.Outputs.Any(t => t.Name == name && t.UseDefaultIfUnwired)) Error($"Missing output connector '{name}'.");
+            if (requireAllOutputs && !outputs.Any(n => ConnectorName(n) == name) && !c.Outputs.Any(t => t.Name == name && t.UseDefaultIfUnwired)) Error($"Missing output connector '{name}'.");
     }
 }

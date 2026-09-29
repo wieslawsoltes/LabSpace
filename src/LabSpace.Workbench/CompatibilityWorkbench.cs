@@ -13,7 +13,7 @@ public sealed partial class InstrumentWorkbench
     private LabPane? _quickPane;
     public QuickDropControl QuickDrop { get; } = new();
     public string OverlayMode { get; private set; } = "";
-    public IEnumerable<KeyValuePair<string, FrameworkElement>> OverlayFields => _overlayFields.Concat(_contractEditor?.Fields ?? new Dictionary<string, FrameworkElement>());
+    public IEnumerable<KeyValuePair<string, FrameworkElement>> OverlayFields => _overlayFields.Concat(_contractEditor?.Fields ?? new Dictionary<string, FrameworkElement>()).Concat(_frameEditor?.Fields ?? new Dictionary<string, FrameworkElement>()).Concat(_formulaEditor?.Fields ?? new Dictionary<string, FrameworkElement>());
 
     private void InitializeCompatibility(Grid root, StackPanel tools)
     {
@@ -49,6 +49,7 @@ public sealed partial class InstrumentWorkbench
         quick.Invoked += (_, e) => { if (_dialogOpen) return; OpenQuickDrop(View == StudioView.FrontPanel); e.Handled = true; }; KeyboardAccelerators.Add(quick);
         var step = new KeyboardAccelerator { Key = VirtualKey.F11 };
         step.Invoked += (_, e) => { if (_dialogOpen) return; Safe(Session.StepInto); e.Handled = true; }; KeyboardAccelerators.Add(step);
+        InitializeAdvanced(tools);
     }
     private void OpenQuickDrop(bool controls, Point? position = null)
     {
@@ -87,7 +88,7 @@ public sealed partial class InstrumentWorkbench
     private void CloseOverlay()
     {
         if (_quickPane is not null) { _quickPane.PaneContent = null; _quickPane = null; }
-        _overlay.Visibility = Visibility.Collapsed; _overlay.Children.Clear(); _overlayFields.Clear(); _contractEditor = null; OverlayMode = ""; _dialogOpen = false;
+        _overlay.Visibility = Visibility.Collapsed; _overlay.Children.Clear(); _overlayFields.Clear(); _contractEditor = null; _frameEditor = null; _formulaEditor = null; OverlayMode = ""; _dialogOpen = false;
         if (View == StudioView.FrontPanel) FrontPanel.Focus(FocusState.Programmatic); else BlockDiagram.Focus(FocusState.Programmatic);
     }
     private void RunOrShowErrors()
@@ -97,6 +98,7 @@ public sealed partial class InstrumentWorkbench
     }
     private void UpdateCompatibility()
     {
+        UpdateAdvanced();
         if (_commands["run"].Content is VectorIcon icon) { var name = Session.Diagnostics.Count > 0 ? "run-broken" : "run"; if (icon.Icon != name) { icon.Icon = name; icon.Invalidate(); } }
         var inCase = false;
         if (Session.Path.Count > 0)
@@ -106,7 +108,7 @@ public sealed partial class InstrumentWorkbench
             {
                 var level = Session.Path[i]; var node = graph.Nodes.FirstOrDefault(n => n.Id == level.NodeId); if (node is null) break;
                 if (i == Session.Path.Count - 1) inCase = node.Kind == "case";
-                graph = (level.Alternative ? node.Alternative : node.Body) ?? graph;
+                graph = InstrumentSession.ResolveChild(node, level) ?? graph;
             }
         }
         _commands["true-branch"].Visibility = _commands["false-branch"].Visibility = inCase ? Visibility.Visible : Visibility.Collapsed;

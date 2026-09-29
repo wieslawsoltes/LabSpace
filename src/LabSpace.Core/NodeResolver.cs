@@ -10,27 +10,34 @@ internal static class NodeResolver
         public string Kind = "";
         public ValueKind Type;
         public StructureContract? Contract;
+        public FormulaSignature? Formula;
         public NodeDefinition? Definition;
     }
     private static readonly ConditionalWeakTable<Node, Entry> Cache = new();
     public static NodeDefinition Resolve(Node node)
     {
         var basis = NodeCatalog.Get(node.Kind);
-        if (node.Contract is null && node.Kind is not ("input" or "output")) return basis;
+        if (node.Contract is null && node.Kind is not ("input" or "output" or "sequence-read" or "sequence-write" or "formula" or "case-multi" or "sequence")) return basis;
         var entry = Cache.GetValue(node, static _ => new Entry());
-        if (entry.Definition is not null && entry.Kind == node.Kind && entry.Type == node.DataType && ReferenceEquals(entry.Contract, node.Contract)) return entry.Definition;
+        if (entry.Definition is not null && entry.Kind == node.Kind && entry.Type == node.DataType && ReferenceEquals(entry.Contract, node.Contract) && ReferenceEquals(entry.Formula, node.Formula)) return entry.Definition;
         var result = ResolveCore(node, basis);
-        entry.Kind = node.Kind; entry.Type = node.DataType; entry.Contract = node.Contract; entry.Definition = result;
+        entry.Kind = node.Kind; entry.Type = node.DataType; entry.Contract = node.Contract; entry.Formula = node.Formula; entry.Definition = result;
         return result;
     }
     private static NodeDefinition ResolveCore(Node node, NodeDefinition basis)
     {
-        if (node.Kind == "input") return basis with { Output = node.DataType, Outputs = [new("result", node.DataType)] };
-        if (node.Kind == "output") return basis with { Output = node.DataType, Inputs = [new("x", node.DataType)], Outputs = [] };
+        if (node.Kind is "input" or "sequence-read") return basis with { Output = node.DataType, Outputs = [new("result", node.DataType)] };
+        if (node.Kind is "output" or "sequence-write") return basis with { Output = node.DataType, Inputs = [new("x", node.DataType)], Outputs = [] };
+        if (node.Kind == "formula")
+        {
+            var signature = node.Formula ?? new FormulaSignature();
+            return basis with { Inputs = signature.Inputs.Select(name => new PortDefinition(name, ValueKind.Number)).ToArray(),
+                Outputs = signature.Outputs.Select(name => new OutputDefinition(name, ValueKind.Number)).ToArray() };
+        }
         if (node.Contract is not { } contract) return basis;
         var inputs = new List<PortDefinition>(); var outputs = new List<OutputDefinition>();
         if (node.Kind == "for") inputs.Add(new("count", ValueKind.Number, false, contract.Inputs.Any(t => t.Indexing) ? 10000 : 10));
-        if (node.Kind == "case") inputs.Add(new("selector", ValueKind.Boolean));
+        if (node.Kind is "case" or "case-multi") inputs.Add(new("selector", node.Kind == "case" ? ValueKind.Boolean : node.DataType));
         inputs.AddRange(contract.Inputs.Select(t => new PortDefinition(t.Name, t.Indexing ? ValueKind.Array : t.Type, t.Required)));
         foreach (var r in contract.Registers.Where(r => r.Initialized))
             for (var i = 0; i < r.HistoryDepth; i++) inputs.Add(new("initial:" + r.Name + (i == 0 ? "" : ":" + i), r.Type, false));

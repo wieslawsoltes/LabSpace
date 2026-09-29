@@ -41,8 +41,11 @@ internal sealed class BrowserDiagnostics : IDisposable
                 json.WriteStartObject("outputs");
                 for (var i = 0; i < definition.Outputs.Length; i++) { var q = DiagramGeometry.Output(node, i); var screen = surface.ToScreen(new(q.X, q.Y)); Point(json, definition.Outputs[i].Name, origin.X + screen.X, origin.Y + screen.Y); }
                 json.WriteEndObject(); json.WriteBoolean("typed", node.Contract is not null);
+                json.WriteString("text", node.Text); json.WriteString("type", node.DataType.ToString()); json.WriteNumber("visibleFrame", node.VisibleFrame); json.WriteNumber("frameCount", node.Frames.Count);
+                json.WriteStartArray("frameLabels"); foreach (var frame in node.Frames) json.WriteStringValue(frame.Label); json.WriteEndArray();
+                json.WriteStartObject("namedValues"); foreach (var port in definition.Outputs) { var v = session.OutputValue(node.Id, port.Name); if (v is not null) json.WriteString(port.Name, v.ToString()); } json.WriteEndObject();
                 if (node.Contract is { Registers.Length: > 0 } contract) json.WriteBoolean("registerInitialized", contract.Registers[0].Initialized);
-                if (session.Values.TryGetValue(node.Id, out var result)) { json.WriteString("result", result.ToString()); if (result.Kind == ValueKind.Number) json.WriteNumber("number", result.Number); json.WriteNumber("samples", result.Samples.Length); json.WriteStartArray("sampleValues"); foreach (var value in result.Samples.Take(16)) json.WriteNumberValue(value); json.WriteEndArray(); }
+                if (session.Values.TryGetValue(node.Id, out var result)) { json.WriteString("result", result.ToString()); if (result.Kind == ValueKind.Error) { json.WriteBoolean("errorStatus", result.Error.Status); json.WriteNumber("errorCode", result.Error.Code); json.WriteString("errorSource", result.Error.Source); } if (result.Kind == ValueKind.Complex) { json.WriteNumber("real", result.Complex.Real); json.WriteNumber("imaginary", result.Complex.Imaginary); } if (result.Kind == ValueKind.Number) json.WriteNumber("number", result.Number); json.WriteNumber("samples", result.Samples.Length); json.WriteStartArray("sampleValues"); foreach (var value in result.Samples.Take(16)) json.WriteNumberValue(value); json.WriteEndArray(); }
                 json.WriteEndObject();
             }
             json.WriteEndArray();

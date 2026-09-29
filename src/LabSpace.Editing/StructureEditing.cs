@@ -33,14 +33,28 @@ public sealed partial class InstrumentSession
                     foreach (var n in body.Nodes.Where(n => n.Kind == "output" && string.IsNullOrWhiteSpace(n.Text))) n.Text = node.Kind is "for" or "while" ? "state" : "result";
                 }
             }
-            node.Contract = contract; node.Body ??= new(); SynchronizeConnectors(node, node.Body);
-            if (node.Kind == "case") { node.Alternative ??= new(); SynchronizeConnectors(node, node.Alternative); }
+            node.Contract = contract;
+            if (StructureFrames.HasFrames(node))
+            {
+                foreach (var frame in node.Frames) SynchronizeConnectors(node, frame.Diagram, node.Kind != "sequence");
+                if (node.Kind == "sequence" && node.Frames.Count > 0)
+                {
+                    var existing = node.Frames.SelectMany(f => f.Diagram.Nodes).Where(n => n.Kind == "output").Select(GraphCompiler.ConnectorName).ToHashSet(StringComparer.Ordinal);
+                    foreach (var output in contract.Outputs.Where(o => !existing.Contains(o.Name)))
+                        node.Frames[^1].Diagram.Nodes.Add(StructuredExamples.Connector("output", output.Name, output.Type, 620, 40 + existing.Count * 90));
+                }
+            }
+            else
+            {
+                node.Body ??= new(); SynchronizeConnectors(node, node.Body);
+                if (node.Kind == "case") { node.Alternative ??= new(); SynchronizeConnectors(node, node.Alternative); }
+            }
             var definition = NodeCatalog.Resolve(node);
             // Removing a declared terminal is explicit and removes only its attached wires. Undo restores the entire edit.
             Diagram.Wires.RemoveAll(w => (w.To == id && !definition.Inputs.Any(p => p.Name == w.Input)) || (w.From == id && definition.FindOutput(w.Output) is null));
         });
     }
-    private static void SynchronizeConnectors(Node owner, Diagram body)
+    private static void SynchronizeConnectors(Node owner, Diagram body, bool createOutputs = true)
     {
         var contract = owner.Contract!;
         var inputs = contract.Inputs.ToDictionary(t => t.Name, t => t.Type, StringComparer.Ordinal);
@@ -61,8 +75,8 @@ public sealed partial class InstrumentSession
             foreach (var (name, type) in terminals)
             {
                 var connector = body.Nodes.FirstOrDefault(n => n.Kind == kind && (kind == "input" ? n.Text : GraphCompiler.ConnectorName(n)) == name);
-                if (connector is null) body.Nodes.Add(StructuredExamples.Connector(kind, name, type, kind == "input" ? 30 : 620, 40 + row * 90));
-                else connector.DataType = type;
+                if (connector is null && (kind != "output" || createOutputs)) body.Nodes.Add(StructuredExamples.Connector(kind, name, type, kind == "input" ? 30 : 620, 40 + row * 90));
+                else if (connector is not null) connector.DataType = type;
                 row++;
             }
         }
@@ -72,7 +86,7 @@ public sealed partial class InstrumentSession
     {
         try
         {
-            IsRunning = false; IsPaused = true; _frame ??= _runtime.Start(Plan()); _frame.StepInto(); PublishFrame();
+            _stepOutTarget = null; IsRunning = false; IsPaused = true; _frame ??= _runtime.Start(Plan()); _frame.StepInto(); PublishFrame();
             if (_frame.Completed) { CompleteFrame(); _frame = null; IsPaused = false; }
             Status = IsPaused ? "Step into · " + (_frame?.ActiveFrame.Path ?? "root") : "Execution complete";
             Notify(SessionChange.Execution | SessionChange.View);

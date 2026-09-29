@@ -38,7 +38,8 @@ public sealed class DataflowRuntime
             case "constant": case "control": return Value.Numeric(n.Value);
             case "bool": case "bool-control": return Value.Bool(n.Value != 0);
             case "string": case "string-control": return Value.String(n.Text);
-            case "indicator": case "bool-indicator": case "string-indicator": case "array-indicator": case "graph": case "chart": case "output": case "stop": return input("x");
+            case "sequence-write": case "error-indicator": case "complex-indicator": case "indicator": case "bool-indicator": case "string-indicator": case "array-indicator": case "graph": case "chart": case "output": case "stop": return input("x");
+            case "sequence-read": return args.TryGetValue("local:" + n.Text, out var local) ? local : throw new InvalidOperationException($"Sequence local '{n.Text}' is unavailable.");
             case "input": return args.TryGetValue(n.Text, out var arg) ? arg : ValueDefaults.Create(n.DataType, n.Value);
             case "add": return Value.Numeric(N("x") + N("y"));
             case "subtract": return Value.Numeric(N("x") - N("y"));
@@ -79,7 +80,7 @@ public sealed class DataflowRuntime
             case "time": return Value.Numeric(Time);
             case "random": return Value.Numeric(Random());
             case "feedback": return State(path + "/" + n.Id, Value.Numeric(n.Value), pending);
-            default: return ExtendedKernels.Evaluate(n, input);
+            default: return AdvancedKernels.TryEvaluate(n, input, out var advanced) ? advanced : ExtendedKernels.Evaluate(n, input);
         }
     }
     private static int Integer(double value, int minimum, int maximum, string name)

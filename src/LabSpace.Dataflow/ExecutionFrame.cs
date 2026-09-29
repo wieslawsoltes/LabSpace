@@ -78,9 +78,22 @@ public sealed class ExecutionFrame
                         LastNodeId = node.Model.Id;
                         return;
                     }
-                    var value = _runtime.Evaluate(node, Input, _budget, _arguments, Path, _pending);
-                    Values[node.Model.Id] = value;
-                    foreach (var output in node.Definition.Outputs) Outputs[new(node.Model.Id, output.Name)] = value;
+                    if (AdvancedKernels.TryNamed(node, Input, out var named))
+                    {
+                        foreach (var output in node.Definition.Outputs)
+                        {
+                            var result = named[output.Name];
+                            if (result.Kind != output.Kind) throw new InvalidOperationException("Kernel output type does not match its declaration.");
+                            Outputs[new(node.Model.Id, output.Name)] = result;
+                        }
+                        Values[node.Model.Id] = named[node.Definition.Outputs[0].Name];
+                    }
+                    else
+                    {
+                        var value = _runtime.Evaluate(node, Input, _budget, _arguments, Path, _pending);
+                        Values[node.Model.Id] = value;
+                        foreach (var output in node.Definition.Outputs) Outputs[new(node.Model.Id, output.Name)] = value;
+                    }
                 }
                 LastNodeId = node.Model.Id; _next++;
                 if (_next == Graph.Order.Count) Finish();

@@ -53,6 +53,8 @@ public static class ValueDefaults
         ValueKind.String => Value.String(text),
         ValueKind.Array => Value.Vector([]),
         ValueKind.Waveform => Value.Series([], 1),
+        ValueKind.Error => Value.ErrorValue(),
+        ValueKind.Complex => Value.ComplexValue(0, 0),
         _ => throw new ArgumentOutOfRangeException(nameof(kind))
     };
 }

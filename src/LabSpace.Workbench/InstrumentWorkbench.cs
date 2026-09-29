@@ -226,12 +226,15 @@ public sealed partial class InstrumentWorkbench : UserControl, IDisposable
     private void ToggleErrors() { BuildErrors(); _errorsHost.Visibility = _errorsHost.Visibility == Visibility.Visible ? Visibility.Collapsed : Visibility.Visible; }
     private async void EditNode(Node node)
     {
-        if (_dialogOpen) return; _dialogOpen = true;
+        if (_dialogOpen) return;
+        if (node.Kind == "formula") { OpenFormula(node); return; }
+        if (node.Kind is "error-control" or "error-constant") { OpenError(node); return; }
+        if (node.Kind is "complex-control" or "complex") { OpenComplex(node); return; } _dialogOpen = true;
         try
         {
-            var kind = NodeCatalog.Get(node.Kind); var editable = kind.IsControl || node.Kind is "constant" or "bool" or "string" or "array" or "input" or "output";
+            var kind = NodeCatalog.Get(node.Kind); var editable = kind.IsControl || node.Kind is "constant" or "bool" or "string" or "array" or "input" or "output" or "sequence-read" or "sequence-write";
             if (!editable) { ShowProperties(true); return; }
-            var isText = node.Kind is "string" or "string-control" or "array" or "input" or "output";
+            var isText = node.Kind is "string" or "string-control" or "array" or "input" or "output" or "sequence-read" or "sequence-write";
             var box = new LabTextBox(isText ? node.Text : node.Value.ToString("G17", CultureInfo.InvariantCulture), node.Label) { MinWidth = 290 };
             var dialog = new ContentDialog { XamlRoot = XamlRoot, Title = node.Label, Content = box, PrimaryButtonText = "Apply", CloseButtonText = "Cancel", DefaultButton = ContentDialogButton.Primary };
             dialog.Opened += (_, _) => { box.Focus(FocusState.Programmatic); box.SelectAll(); };
