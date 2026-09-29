@@ -13,7 +13,7 @@ public sealed class ExecutionFrame
     private readonly bool _root;
     private readonly Stopwatch _watch = new();
     private int _next;
-    private StructureActivation? _structure;
+    private IStructureActivation? _structure;
     public CompiledGraph Graph { get; }
     public string Path { get; }
     public Dictionary<string, Value> Values { get; } = new(StringComparer.Ordinal);
@@ -74,13 +74,24 @@ public sealed class ExecutionFrame
                     }
                     if (node.Definition.IsStructure)
                     {
-                        _structure = new(_runtime, node, Input, _budget, Path, _pending);
+                        _structure = node.Frames is { } frames
+                            ? new FrameActivation(_runtime, node, frames, Input, _budget, Path, _pending)
+                            : new StructureActivation(_runtime, node, Input, _budget, Path, _pending);
                         LastNodeId = node.Model.Id;
                         return;
                     }
-                    var value = _runtime.Evaluate(node, Input, _budget, _arguments, Path, _pending);
-                    Values[node.Model.Id] = value;
-                    foreach (var output in node.Definition.Outputs) Outputs[new(node.Model.Id, output.Name)] = value;
+                    if (node.Formula is not null || ProgrammingKernels.IsMultiOutput(node.Model.Kind))
+                    {
+                        var results = node.Formula is { } program ? program.Evaluate(Input, _budget) : ProgrammingKernels.Evaluate(node.Model, Input);
+                        foreach (var output in node.Definition.Outputs) Outputs[new(node.Model.Id, output.Name)] = results[output.Name];
+                        Values[node.Model.Id] = node.Definition.Outputs.Length > 0 ? results[node.Definition.Outputs[0].Name] : Value.Numeric(0);
+                    }
+                    else
+                    {
+                        var value = _runtime.Evaluate(node, Input, _budget, _arguments, Path, _pending);
+                        Values[node.Model.Id] = value;
+                        foreach (var output in node.Definition.Outputs) Outputs[new(node.Model.Id, output.Name)] = value;
+                    }
                 }
                 LastNodeId = node.Model.Id; _next++;
                 if (_next == Graph.Order.Count) Finish();

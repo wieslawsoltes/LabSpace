@@ -42,6 +42,9 @@ public sealed record StructureContract
     public string PrimaryOutput { get; init; } = "result";
     public bool ConditionalFor { get; init; }
     public bool ContinueWhenTrue { get; init; }
+    public ValueKind SelectorType { get; init; } = ValueKind.Boolean;
+    public bool CaseInsensitive { get; init; }
+    public ImmutableArray<SequenceLocal> Locals { get; init; } = [];
 }
 
 public static class ValueDefaults
@@ -53,6 +56,8 @@ public static class ValueDefaults
         ValueKind.String => Value.String(text),
         ValueKind.Array => Value.Vector([]),
         ValueKind.Waveform => Value.Series([], 1),
+        ValueKind.Error => Value.ErrorCluster(number != 0, checked((int)number), text),
+        ValueKind.Complex => Value.Complex(number, 0),
         _ => throw new ArgumentOutOfRangeException(nameof(kind))
     };
 }

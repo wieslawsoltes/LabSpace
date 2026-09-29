@@ -8,14 +8,18 @@ public sealed class GraphValidationException(IReadOnlyList<Diagnostic> diagnosti
     public IReadOnlyList<Diagnostic> Diagnostics { get; } = diagnostics;
 }
 public readonly record struct SourceTerminal(string NodeId, string Output);
-public sealed record CompiledNode(Node Model, NodeDefinition Definition, IReadOnlyDictionary<string, SourceTerminal> Sources, CompiledGraph? Body, CompiledGraph? Alternative);
+public sealed record CompiledNode(Node Model, NodeDefinition Definition, IReadOnlyDictionary<string, SourceTerminal> Sources, CompiledGraph? Body, CompiledGraph? Alternative)
+{
+    public FrameProgram? Frames { get; init; }
+    public FormulaProgram? Formula { get; init; }
+}
 public sealed record CompiledGraph(IReadOnlyList<CompiledNode> Order)
 {
     public IReadOnlyDictionary<string, string> ConnectorOutputs { get; init; } = new Dictionary<string, string>();
     public string? ConditionNode { get; init; }
 }
 
-public static class GraphCompiler
+public static partial class GraphCompiler
 {
     public static IReadOnlyList<Diagnostic> Validate(Diagram graph)
     {
@@ -39,6 +43,7 @@ public static class GraphCompiler
                 {
                     var before = errors.Count;
                     if (node.Contract is not null) ValidateContract(node, basis, errors);
+                    if ((node.Kind is "sequence" or "formula" || node.Frames.Count > 0) && node.Contract is null) errors.Add(new("CONTRACT", "A frame structure or formula requires a connector contract.", node.Id));
                     if (errors.Count == before) definitions[node.Id] = NodeCatalog.Resolve(node);
                 }
                 if (!Enum.IsDefined(node.DataType)) errors.Add(new("TYPE", "Unknown connector data type.", node.Id));
@@ -67,7 +72,14 @@ public static class GraphCompiler
             while (ready.TryDequeue(out var id))
             {
                 var model = nodes[id]; var definition = definitions[id]; CompiledGraph? body = null, alternative = null;
-                if (definition.IsStructure)
+                FrameProgram? frames = null; FormulaProgram? formula = null;
+                if (model.Kind == "formula")
+                {
+                    try { formula = FormulaProgram.Compile(model.Text, model.Contract!); }
+                    catch (ArgumentException ex) { errors.Add(new("FORMULA", ex.Message, id)); }
+                }
+                else if (model.Frames.Count > 0 || model.Kind == "sequence") frames = CompileFrames(model, depth, ancestors, errors);
+                else if (definition.IsStructure)
                 {
                     var defaults = model.Contract?.Outputs.Where(t => t.UseDefaultIfUnwired).Select(t => t.Name).ToHashSet(StringComparer.Ordinal);
                     if (model.Body is null) errors.Add(new("BODY", $"{model.Label}: structure body is missing.", id));
@@ -78,7 +90,7 @@ public static class GraphCompiler
                         else { alternative = Compile(model.Alternative, depth + 1, ancestors, defaults); ValidateBody(model, model.Alternative, errors); }
                     }
                 }
-                ordered.Add(new(model, definition, inputs[id], body, alternative));
+                ordered.Add(new(model, definition, inputs[id], body, alternative) { Frames = frames, Formula = formula });
                 foreach (var target in edges[id]) if (--indegree[target] == 0) ready.Enqueue(target);
             }
             if (ordered.Count != nodes.Count) errors.Add(new("CYCLE", "Combinational cycle detected. Insert an explicit Feedback node to carry state between frames."));
@@ -95,8 +107,10 @@ public static class GraphCompiler
     {
         var c = node.Contract!;
         void Error(string message) => errors.Add(new("CONTRACT", message, node.Id));
-        if (!basis.IsStructure) { Error("Only structures can declare a connector contract."); return; }
+        if (!basis.IsStructure && node.Kind != "formula") { Error("Only structures and formulas can declare a connector contract."); return; }
         if (c.Inputs.IsDefault || c.Outputs.IsDefault || c.Registers.IsDefault || c.Inputs.Length > 32 || c.Outputs.Length > 32 || c.Registers.Length > 16) { Error("Invalid or excessive structure terminals."); return; }
+        if (c.Inputs.Any(t => t is null) || c.Outputs.Any(t => t is null) || c.Registers.Any(t => t is null)) { Error("Null structure terminal."); return; }
+        ValidateProgrammingContract(node, errors);
         var namesIn = new HashSet<string>(["i", "N", "count", "selector"], StringComparer.Ordinal);
         var namesOut = new HashSet<string>(StringComparer.Ordinal);
         static bool Name(string name) => !string.IsNullOrWhiteSpace(name) && name.Length <= 64 && !name.Contains(':') && name.All(ch => char.IsLetterOrDigit(ch) || ch == '_');
@@ -150,6 +164,6 @@ public static class GraphCompiler
         foreach (var node in outputs)
             if (!expected.TryGetValue(ConnectorName(node), out var kind) || kind != node.DataType) Error($"Output connector '{ConnectorName(node)}' does not match the structure contract.", node.Id);
         foreach (var (name, _) in expected)
-            if (!outputs.Any(n => ConnectorName(n) == name) && !c.Outputs.Any(t => t.Name == name && t.UseDefaultIfUnwired)) Error($"Missing output connector '{name}'.");
+            if (!outputs.Any(n => ConnectorName(node) == name) && !c.Outputs.Any(t => t.Name == name && t.UseDefaultIfUnwired)) Error($"Missing output connector '{name}'.");
     }
 }
