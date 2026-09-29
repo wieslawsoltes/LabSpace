@@ -74,7 +74,7 @@ public static class NodeCatalog
         Add("stop", "Loop condition", "Structures", "STOP", "Stops a while loop after the current iteration when TRUE.", ValueKind.Boolean, false, B("x"));
         Add("for", "For Loop", "Structures", "FOR", "For Loop with optional typed tunnels, auto-indexing and stacked shift registers. Double-click to edit its body.", ValueKind.Number, true, N("count", false, 10), N("initial", false));
         Add("while", "While Loop", "Structures", "WHILE", "While Loop with typed tunnels and shift registers. Safety limit: 10,000 iterations and a shared node budget.", ValueKind.Number, true, N("initial", false));
-        Add("case", "Case Structure", "Structures", "CASE", "Executes only the selected branch. TRUE uses Body; FALSE uses Alternative. Supports named typed tunnels.", ValueKind.Number, true, B("selector"), N("initial", false));
+        Add("case", "Boolean Case (legacy)", "Structures", "CASE", "Executes only the selected branch. TRUE uses Body; FALSE uses Alternative. Supports named typed tunnels.", ValueKind.Number, true, B("selector"), N("initial", false));
         Add("subvi", "SubVI", "Structures", "VI", "Executes an embedded reusable diagram with a named typed connector contract. Double-click to edit the body.", ValueKind.Number, true, N("x", false));
         ExtendedNodeCatalog.Append(result);
         result.AddRange(AdvancedNodeCatalog.All);

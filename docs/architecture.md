@@ -63,7 +63,7 @@ Canvas accessibility remains a separate parity boundary: richer per-node/control
 
 ## Documents and limits
 
-Source-generated JSON accepts format 1 or 2 and migrates loaded version-1 projects to version 2. Format 2 stores contracts, connector types and named outputs. Old LabSpace 0.1 cannot load these files. Import does not evaluate code or install plugins. Unsupported kinds/types are rejected rather than approximated.
+Source-generated JSON accepts formats 1, 2 and 3 and migrates older projects to version 3. Format 3 adds frames, formula signatures and node sizes to contracts, connector types and named outputs. Earlier LabSpace releases cannot load version-3 files. Import does not execute external code or install plugins. Unsupported kinds/types are rejected rather than approximated.
 
 | Resource | Bound |
 | --- | --- |

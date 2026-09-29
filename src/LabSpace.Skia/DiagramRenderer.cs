@@ -7,6 +7,7 @@ namespace LabSpace.Skia;
 public sealed class DiagramRenderer(LabFonts fonts) : IDisposable
 {
     private readonly LabDrawing _d = new(fonts);
+    private readonly SKPath _selectorArrow = CreateSelectorArrow();
     private readonly Dictionary<string, (SKPoint[] Points, SKPath Path, SKColor Color, float Width)> _wires = [];
     private int _signature;
     private readonly Dictionary<string, SKPicture> _previews = [];
@@ -96,12 +97,13 @@ public sealed class DiagramRenderer(LabFonts fonts) : IDisposable
             if (StructureFrames.HasFrames(n))
             {
                 var selector = new SKRect(b.MidX - 92, b.Top - 1, b.MidX + 92, b.Top + 19); _d.Bevel(c, selector, "#F2F2F2");
-                _d.Text(c, "◀", selector.Left + 9, selector.Top + 14, 10, "#333333", true); _d.Text(c, "▶", selector.Right - 9, selector.Top + 14, 10, "#333333", true);
+                DrawSelectorArrow(c, selector.Left + 9, selector.MidY, false);
+                DrawSelectorArrow(c, selector.Right - 9, selector.MidY, true);
                 c.Save(); c.ClipRect(new(selector.Left + 20, selector.Top, selector.Right - 20, selector.Bottom)); _d.Text(c, StructureFrames.Caption(n), b.MidX, b.Top + 13, 11, "#333333", true); c.Restore();
             }
             else { _d.Rect(c, b.MidX - 31, b.Top - 1, 62, 17, "#EFEFEF"); _d.Text(c, def.Glyph, b.MidX, b.Top + 12, 11, "#555555", true); }
             DrawPreview(c, n, new(b.Left + 28, b.Top + 23, b.Right - 28, b.Bottom - 23));
-            _d.Text(c, n.Kind is "for" or "while" ? "i" : "VI", b.Left + 12, b.Bottom - 10, 11, "#226AB2");
+            if (n.Kind is "for" or "while" or "subvi") _d.Text(c, n.Kind == "subvi" ? "VI" : "i", b.Left + 12, b.Bottom - 10, 11, "#226AB2");
             if (n.Kind == "while" || n.Contract?.ConditionalFor == true) _d.Circle(c, b.Right - 15, b.Bottom - 14, 5, LabDrawing.Color("#B63028"));
             _d.Text(c, $"{StructureFrames.VisibleBody(n)?.Nodes.Count ?? 0} nodes · double-click to edit", b.MidX, b.Bottom + 16, 10, "#707070", true);
         }
@@ -189,10 +191,23 @@ public sealed class DiagramRenderer(LabFonts fonts) : IDisposable
         }
         canvas.Save(); canvas.ClipRect(area); canvas.Translate(area.Left, area.Top); canvas.DrawPicture(picture); canvas.Restore();
     }
+    private static SKPath CreateSelectorArrow()
+    {
+        // Original vector geometry avoids missing arrow glyphs on browser fonts.
+        var path = new SKPath();
+        path.MoveTo(-3, -4); path.LineTo(3, 0); path.LineTo(-3, 4); path.Close();
+        return path;
+    }
+    private void DrawSelectorArrow(SKCanvas canvas, float x, float y, bool right)
+    {
+        canvas.Save(); canvas.Translate(x, y); canvas.Scale(right ? 1 : -1, 1);
+        _d.Path(canvas, _selectorArrow, LabDrawing.Color("#333333"), fill: true);
+        canvas.Restore();
+    }
     public void DrawPlacement(SKCanvas canvas, Node node)
     {
         var b = DiagramGeometry.Bounds(node); _d.Rect(canvas, b, new SKColor(80, 135, 205, 25)); _d.Border(canvas, b, LabDrawing.Color("#3977B4"));
         _d.Text(canvas, NodeCatalog.Get(node.Kind).Title, b.Left, b.Top - 7, 12, "#3977B4");
     }
-    public void Dispose() { foreach (var picture in _previews.Values) picture.Dispose(); _previews.Clear(); foreach (var w in _wires.Values) w.Path.Dispose(); _wires.Clear(); _d.Dispose(); }
+    public void Dispose() { foreach (var picture in _previews.Values) picture.Dispose(); _previews.Clear(); foreach (var w in _wires.Values) w.Path.Dispose(); _wires.Clear(); _selectorArrow.Dispose(); _d.Dispose(); }
 }

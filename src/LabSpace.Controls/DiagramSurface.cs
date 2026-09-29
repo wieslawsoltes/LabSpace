@@ -97,7 +97,8 @@ public sealed class DiagramSurface : CanvasViewport
             _resizing = resize; _resizeBounds = DiagramGeometry.Bounds(resize); Session.BeginGesture(); Canvas.CapturePointer(e.Pointer); e.Handled = true; return;
         }
         var header = HitNode(_pointer);
-        if (header is not null && StructureFrames.HasFrames(header) && _pointer.Y < header.Y + 20 && header.Frames.Count > 0)
+        if (header is not null && StructureFrames.HasFrames(header) && _pointer.Y < header.Y + 20 && header.Frames.Count > 0
+            && Math.Abs(_pointer.X - DiagramGeometry.Bounds(header).MidX) <= 92)
         {
             var bounds = DiagramGeometry.Bounds(header); var middle = bounds.MidX;
             if (_pointer.X < middle - 58) Session.SelectFrame(header.Id, (header.VisibleFrame + header.Frames.Count - 1) % header.Frames.Count);

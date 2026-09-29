@@ -135,7 +135,7 @@ The release workflow packages all nine libraries and symbols, audits resolved Sk
 
 ## Files, safety and licensing
 
-Save projects as **`.labspace.json`**. Version-1 files migrate to version 2; older LabSpace 0.1 cannot read version-2 files. NI `.vi`, `.ctl` and `.lvproj` files are not imported. Local recovery is not a substitute for explicit saved copies. Imported JSON does not evaluate script or install drivers.
+Save projects as **`.labspace.json`**. Version-1 and version-2 files migrate to version 3. Earlier LabSpace releases cannot read version-3 files; retain original copies when migrating. NI `.vi`, `.ctl` and `.lvproj` files are not imported. Local recovery is not a substitute for explicit saved copies. Imported JSON does not evaluate script or install drivers.
 
 The application is intended for experimentation, education and component development. It is not validated for safety-critical equipment or physical/hard-real-time control.
 

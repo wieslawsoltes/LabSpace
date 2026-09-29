@@ -120,6 +120,6 @@ F10 steps over; F11 steps into. The context-help pane shows active values withou
 
 ## Serialization, limits and boundaries
 
-Version-2 source-generated JSON stores contracts, connector types and named outputs. Version-1 projects validate and migrate to version 2. LabSpace 0.1 cannot read these version-2 files; retain originals when testing migration. Unknown kinds/types are rejected. Known but unwired diagrams remain editable and are marked broken for execution.
+Source-generated JSON stores contracts, connector types and named outputs. LabSpace 0.3 reads format versions 1, 2 and 3 and migrates older projects to version 3. Earlier releases cannot read version-3 files; retain originals when testing migration. Unknown kinds/types are rejected. Known but unwired diagrams remain editable and are marked broken for execution.
 
 Contracts allow at most 32 input tunnels, 32 outputs, 16 registers and 16 history entries per register. Graphs are limited to 12 nested levels and 100,000 evaluated nodes per root frame. Full G types/coercions, general/n-dimensional arrays, event/sequence structures, linked VIs, drivers, FPGA and hard-real-time execution remain outside this increment. See [compatibility](compatibility.md).

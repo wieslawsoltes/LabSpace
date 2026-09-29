@@ -50,7 +50,7 @@ Large nested graphs yield between transitions to keep input responsive. An indiv
 
 ## Save, recover and export
 
-Save downloads **`.labspace.json`** with all VIs, diagrams, contracts and panel layouts. Version-1 files migrate to version 2 on load. Older LabSpace 0.1 cannot read version-2 files. NI `.vi`, `.ctl`, `.lvproj` and related formats are not parsed.
+Save downloads **`.labspace.json`** with all VIs, diagrams, contracts and panel layouts. Version-1 and version-2 files migrate to version 3 on load. Earlier LabSpace releases cannot read version-3 files; retain original copies. NI `.vi`, `.ctl`, `.lvproj` and related formats are not parsed.
 
 Browser recovery is periodic per-origin IndexedDB; native recovery uses application data. Invalid recovery is preserved instead of silently overwritten. Keep explicit saved files. Replacing a dirty project requires confirmation. Browser Open remains tied to the initiating user action so file pickers work.
 

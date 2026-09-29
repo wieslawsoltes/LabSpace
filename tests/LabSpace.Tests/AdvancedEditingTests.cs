@@ -92,6 +92,10 @@ public sealed class AdvancedEditingTests
         session.Undo(); Assert.Equal(width,session.Find(id)!.Width); Assert.False(session.CanUndo);
         session.BeginGesture(); session.Find(id)!.Width = width+100; session.CancelGesture(); Assert.Equal(width,session.Find(id)!.Width); Assert.False(session.CanUndo);
     }
+    [Fact] public void StandardCasePaletteNameResolvesToTheMultiFrameImplementation()
+    {
+        Assert.Equal("case-multi", NodeCatalog.All.Single(n => n.Title == "Case Structure").Kind);
+    }
     [Fact] public void FormulaInputsCannotBeAssignedAndLogarithmBasesAreExplicit()
     {
         Assert.Throws<FormulaException>(()=>FormulaProgram.Compile("x = 3; result = x;",new()));

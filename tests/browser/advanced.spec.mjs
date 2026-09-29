@@ -100,3 +100,20 @@ test('structure resize and nested step-out are usable from the studio',async({pa
   await command(page,'step-out'); await expect.poll(async()=> (await state(page)).status).toContain('Step out');
   await command(page,'run'); await expect.poll(async()=> (await node(page,'sequence')).number).toBe(84);
 });
+
+
+test('Quick Drop Case Structure selects the multi-frame implementation', async ({page}) => {
+  await sample(page,0,'Signal Analysis.vi'); await page.keyboard.press('Control+Space');
+  await expect.poll(async()=>(await state(page)).overlay).toBe('functions');
+  await click(page,await field(page,'quick-drop-query')); await page.keyboard.insertText('Case Structure'); await page.keyboard.press('Enter');
+  await expect.poll(async()=>(await state(page)).placement).toBe('case-multi');
+  const r=(await state(page)).diagramBounds; await page.mouse.click(r.x+r.width*.45,r.y+r.height*.5);
+  await expect.poll(async()=>(await state(page)).nodes.some(n=>n.kind==='case-multi' && n.frameCount===2)).toBe(true);
+  const placed=await node(page,'case-multi'), b=placed.bounds;
+  await page.mouse.move(b.x+12,b.y+5); await page.mouse.down();
+  await page.mouse.move(b.x+52,b.y+35,{steps:8}); await page.mouse.up();
+  await expect.poll(async()=>(await node(page,'case-multi')).modelX).not.toBe(placed.modelX);
+  expect((await state(page)).overlay).toBe('');
+  await command(page,'undo'); await expect.poll(async()=>(await node(page,'case-multi')).modelX).toBe(placed.modelX);
+  await command(page,'undo'); await expect.poll(async()=>(await state(page)).nodes.some(n=>n.kind==='case-multi')).toBe(false);
+});
