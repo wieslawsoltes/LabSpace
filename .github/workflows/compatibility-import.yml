@@ -1,0 +1,40 @@
+name: Apply verified finishing update
+on:
+  push:
+    branches: [feat/advanced-structures-0.3]
+    paths: ['.compatibility-import/**', '.github/workflows/compatibility-import.yml']
+permissions:
+  contents: write
+jobs:
+  import:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feat/advanced-structures-0.3
+      - name: Apply verified source
+        run: |
+          python3 - <<'PY'
+          import base64,lzma,hashlib,subprocess
+          from pathlib import Path
+          patch=lzma.decompress(base64.b64decode(Path('.compatibility-import/0.b64').read_text().strip()))
+          assert hashlib.sha256(patch).hexdigest()=='d2be5ebb278be8d85aee8c4923dbd58d7946b4f363df8530e43f4f24c2b20177'
+          subprocess.run(['git','apply','--binary','-'],input=patch,check=True)
+          PY
+          git rm -r .compatibility-import .github/workflows/compatibility-import.yml
+          git add .
+          git config user.name "Wiesław Šoltés"
+          git config user.email "wieslawsoltes@users.noreply.github.com"
+          git commit -m "fix: refine frame selector geometry, default Case discovery and migration guidance"
+          git push origin HEAD:feat/advanced-structures-0.3
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+      - name: Engine validation
+        run: dotnet test tests/LabSpace.Tests -c Release --logger 'trx;LogFileName=engine.trx' --results-directory artifacts/tests
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: LabSpace-0.3-finishing-tests
+          path: artifacts/tests
