@@ -5,13 +5,13 @@ namespace LabSpace.Dataflow;
 
 internal static class AdvancedKernels
 {
-    public static bool TryNamed(CompiledNode node, Func<string, Value> input, out IReadOnlyDictionary<string, Value> result)
+    public static bool TryNamed(CompiledNode node, Func<string, Value> input, out IReadOnlyDictionary<string, Value> result, ExecutionBudget? budget = null)
     {
         result = null!;
         switch (node.Model.Kind)
         {
             case "formula":
-                result = node.Formula!.Evaluate(name => input(name).Number).ToDictionary(p => p.Key, p => Value.Numeric(p.Value), StringComparer.Ordinal);
+                result = node.Formula!.Evaluate(name => input(name).Number, budget).ToDictionary(p => p.Key, p => Value.Numeric(p.Value), StringComparer.Ordinal);
                 return true;
             case "error-unbundle":
                 var error = input("x").Error;

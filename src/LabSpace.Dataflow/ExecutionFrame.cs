@@ -78,7 +78,7 @@ public sealed class ExecutionFrame
                         LastNodeId = node.Model.Id;
                         return;
                     }
-                    if (AdvancedKernels.TryNamed(node, Input, out var named))
+                    if (AdvancedKernels.TryNamed(node, Input, out var named, _budget))
                     {
                         foreach (var output in node.Definition.Outputs)
                         {

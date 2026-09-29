@@ -8,10 +8,10 @@ public sealed class FormulaException(string message, int position) : Exception($
     public int Position { get; } = position;
 }
 
-/// <summary>Bounded scalar expression compiler. The immutable bytecode has forward-only branches and cannot execute external code.</summary>
-public sealed class FormulaProgram
+/// <summary>Bounded scalar Formula Node bytecode. Control flow cannot access host code, files or networks.</summary>
+public sealed partial class FormulaProgram
 {
-    private enum Op { Constant, Load, Store, Negate, Not, Boolean, Add, Subtract, Multiply, Divide, Modulo, Power, Equal, NotEqual, Less, LessEqual, Greater, GreaterEqual, Call, Jump, JumpFalse, JumpTrue }
+    private enum Op { Constant, Load, Store, Unset, Negate, Not, Boolean, Add, Subtract, Multiply, Divide, Modulo, Power, Equal, NotEqual, Less, LessEqual, Greater, GreaterEqual, Call, Jump, JumpFalse, JumpTrue }
     private readonly record struct Instruction(Op Code, double Number = 0, int Argument = 0);
     private readonly record struct Function(string Name, int Arity, Func<double[], int, double> Apply);
     private static readonly Function[] Functions =
@@ -32,19 +32,27 @@ public sealed class FormulaProgram
     { _code = code; _inputs = inputs; _outputs = outputs; _slots = slots; }
     public int InstructionCount => _code.Length;
     public static FormulaProgram Compile(string source, FormulaSignature signature) => new Parser(source, signature).Compile();
-    public IReadOnlyDictionary<string, double> Evaluate(Func<string, double> input)
+    public IReadOnlyDictionary<string, double> Evaluate(Func<string, double> input, ExecutionBudget? budget = null, int maximumInstructions = 65536, CancellationToken cancellation = default)
     {
         ArgumentNullException.ThrowIfNull(input);
-        var values = new double[_slots]; var stack = new double[Math.Max(1, _code.Length)]; var sp = 0;
-        foreach (var (name, slot) in _inputs) values[slot] = Finite(input(name));
+        if (maximumInstructions is < 1 or > 1000000) throw new ArgumentOutOfRangeException(nameof(maximumInstructions));
+        cancellation.ThrowIfCancellationRequested(); budget?.CheckCancellation();
+        var values = new double[_slots]; var initialized = new bool[_slots];
+        var stack = new double[Math.Max(1, _code.Length)]; var sp = 0; var executed = 0;
+        foreach (var (name, slot) in _inputs) { values[slot] = Finite(input(name)); initialized[slot] = true; }
         for (var pc = 0; pc < _code.Length; pc++)
         {
+            if (++executed > maximumInstructions) throw new ExecutionLimitException("Formula instruction budget exceeded.");
+            if ((executed & 63) == 1) { cancellation.ThrowIfCancellationRequested(); budget?.CheckCancellation(); }
             var instruction = _code[pc];
             switch (instruction.Code)
             {
                 case Op.Constant: stack[sp++] = instruction.Number; break;
-                case Op.Load: stack[sp++] = values[instruction.Argument]; break;
-                case Op.Store: values[instruction.Argument] = Finite(stack[--sp]); break;
+                case Op.Load:
+                    if (!initialized[instruction.Argument]) throw new InvalidOperationException("Formula variable is uninitialized.");
+                    stack[sp++] = values[instruction.Argument]; break;
+                case Op.Store: values[instruction.Argument] = Finite(stack[--sp]); initialized[instruction.Argument] = true; break;
+                case Op.Unset: initialized[instruction.Argument] = false; break;
                 case Op.Negate: stack[sp-1] = -stack[sp-1]; break;
                 case Op.Not: stack[sp-1] = stack[sp-1] == 0 ? 1 : 0; break;
                 case Op.Boolean: stack[sp-1] = stack[sp-1] != 0 ? 1 : 0; break;
@@ -67,16 +75,18 @@ public sealed class FormulaProgram
                     }); break;
             }
         }
+        foreach (var (name, slot) in _outputs)
+            if (!initialized[slot]) throw new InvalidOperationException($"Formula output '{name}' is uninitialized.");
         return _outputs.ToDictionary(p => p.Name, p => values[p.Slot], StringComparer.Ordinal);
     }
     private static double Finite(double value) => double.IsFinite(value) ? value : throw new ArithmeticException("Formula produced a non-finite result.");
     private sealed record Token(string Text, int Position, double? Number = null);
-    private sealed class Parser
+    private sealed partial class Parser
     {
         private readonly List<Token> _tokens;
         private readonly List<Instruction> _code = [];
         private readonly Dictionary<string, int> _variables = new(StringComparer.Ordinal);
-        private readonly HashSet<string> _assigned = new(StringComparer.Ordinal);
+        private HashSet<int> _assigned = [];
         private readonly FormulaSignature _signature;
         private int _at, _depth;
         private Token Current => _tokens[Math.Min(_at, _tokens.Count - 1)];
@@ -89,36 +99,28 @@ public sealed class FormulaProgram
             _signature = signature; _tokens = Lex(source);
             foreach (var name in signature.Inputs.Concat(signature.Outputs))
             {
-                if (!StructureFrames.Identifier(name) || name is "pi" or "e" || !_variables.TryAdd(name, _variables.Count))
+                if (!ValidVariable(name) || !_variables.TryAdd(name, _variables.Count))
                     throw new FormulaException("Formula terminal names must be distinct identifiers other than pi and e", 0);
             }
-            _assigned.UnionWith(signature.Inputs);
+            _assigned.UnionWith(signature.Inputs.Select(name => _variables[name]));
+            _slotCount = _variables.Count; _readOnly.UnionWith(_assigned); _scopes.Push(new());
         }
         public FormulaProgram Compile()
         {
             if (Current.Text == "<end>") throw Error("Enter an expression or output assignments");
-            if (_tokens.Count > 1 && _tokens[1].Text == "=")
+            if (IsStatementStart())
             {
-                while (Current.Text != "<end>")
-                {
-                    var name = Current.Text;
-                    if (!StructureFrames.Identifier(name) || name is "pi" or "e") throw Error("Expected an assignment identifier");
-                    if (_signature.Inputs.Contains(name)) throw Error("Input variables are read-only");
-                    _at++; Expect("="); Expression();
-                    if (!_variables.TryGetValue(name, out var slot)) { slot = _variables.Count; _variables.Add(name, slot); }
-                    if (_variables.Count > 256) throw Error("Formula variable budget exceeded");
-                    Emit(Op.Store, slot); _assigned.Add(name);
-                    if (!Take(";") && Current.Text != "<end>") throw Error("Expected semicolon");
-                }
+                while (Current.Text != "<end>") Statement();
             }
             else
             {
                 if (_signature.Outputs.Length != 1) throw Error("Multiple outputs require assignment statements");
-                Expression(); Emit(Op.Store, _variables[_signature.Outputs[0]]); _assigned.Add(_signature.Outputs[0]); Take(";");
+                Expression(); Emit(Op.Store, _variables[_signature.Outputs[0]]); _assigned.Add(_variables[_signature.Outputs[0]]); Take(";");
                 if (Current.Text != "<end>") throw Error("Unexpected token after expression");
             }
-            foreach (var name in _signature.Outputs) if (!_assigned.Contains(name)) throw Error($"Output '{name}' is not assigned");
-            return new(_code.ToArray(), _signature.Inputs.Select(n => (n, _variables[n])).ToArray(), _signature.Outputs.Select(n => (n, _variables[n])).ToArray(), _variables.Count);
+            foreach (var name in _signature.Outputs)
+                if (_reachable && !_assigned.Contains(_variables[name])) throw Error($"Output '{name}' is not assigned on every returning path");
+            return new(_code.ToArray(), _signature.Inputs.Select(n => (n, _variables[n])).ToArray(), _signature.Outputs.Select(n => (n, _variables[n])).ToArray(), _slotCount);
         }
         private void Expression(int minimum = 0)
         {
@@ -172,7 +174,7 @@ public sealed class FormulaProgram
                 Emit(Op.Call, index); return;
             }
             if (name is "pi" or "e") { EmitConstant(name == "pi" ? Math.PI : Math.E); return; }
-            if (!_assigned.Contains(name) || !_variables.TryGetValue(name, out var slot)) throw Error($"Unknown or unassigned variable '{name}'");
+            if (!_variables.TryGetValue(name, out var slot) || !_assigned.Contains(slot)) throw Error($"Unknown or unassigned variable '{name}'");
             Emit(Op.Load, slot);
         }
         private static int Precedence(string op) => op switch { "||" => 1, "&&" => 2, "==" or "!=" => 3, "<" or "<=" or ">" or ">=" => 4, "+" or "-" => 5, "*" or "/" or "%" => 6, "**" => 7, _ => 0 };
@@ -182,7 +184,7 @@ public sealed class FormulaProgram
             _code.Add(new(op, Argument: argument)); return _code.Count - 1;
         }
         private void EmitConstant(double value) { var at = Emit(Op.Constant); _code[at] = new(Op.Constant, value); }
-        private void Patch(int index) => _code[index] = _code[index] with { Argument = _code.Count };
+        private void Patch(int index, int? target = null) => _code[index] = _code[index] with { Argument = target ?? _code.Count };
         private bool Take(string token) { if (Current.Text != token) return false; _at++; return true; }
         private void Expect(string token) { if (!Take(token)) throw Error($"Expected '{token}'"); }
         private FormulaException Error(string message) => new(message, _tokens[Math.Min(_at, _tokens.Count-1)].Position);
@@ -220,8 +222,8 @@ public sealed class FormulaProgram
                 else
                 {
                     var text = at+1 < source.Length ? source.Substring(at,2) : "";
-                    if (text is "&&" or "||" or "==" or "!=" or "<=" or ">=" or "**") at += 2;
-                    else { text = c.ToString(); at++; if (!"+-*/%!=<>()?,:;".Contains(c)) throw new FormulaException("Unsupported character", start); }
+                    if (text is "&&" or "||" or "==" or "!=" or "<=" or ">=" or "**" or "++" or "--" or "+=" or "-=" or "*=" or "/=" or "%=") at += 2;
+                    else { text = c.ToString(); at++; if (!"+-*/%!=<>()?,:;{}".Contains(c)) throw new FormulaException("Unsupported character", start); }
                     tokens.Add(new(text,start));
                 }
                 if (tokens.Count > 4096) throw new FormulaException("Formula token budget exceeded", at);
