@@ -82,7 +82,7 @@ public sealed class DiagramRenderer(LabFonts fonts) : IDisposable
     {
         if (!NodeCatalog.TryGet(n.Kind, out var def)) { _d.Bevel(c, b, "#FFE1E1"); _d.Text(c, "Unknown function", b.Left + 4, b.MidY); return; }
         def = NodeCatalog.Resolve(n);
-        var selected = session.Selection.Contains(n.Id); var active = session.ActiveNode == n.Id && session.DebugFrame?.Path == session.VisibleDebugPath && (session.Highlight || session.IsPaused);
+        var selected = session.Selection.Contains(n.Id); var active = session.DebuggingEnabled && session.ActiveNode == n.Id && session.DebugFrame?.Path == session.VisibleDebugPath && (session.Highlight || session.IsPaused);
         if (active) { var glow = b; glow.Inflate(7, 7); _d.Rect(c, glow, LabDrawing.Color("#FFF085")); }
         var label = n.Label.Length > 28 ? n.Label[..26] + "…" : n.Label;
         var labelX = def.IsControl ? b.Left - 8 - _d.Font(13).MeasureText(label) : def.IsIndicator ? b.Right + 8 : b.Left;

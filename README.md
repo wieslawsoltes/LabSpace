@@ -37,14 +37,14 @@ LabSpace is a working independent implementation inspired by the classic NI LabV
 | Area | Working functionality |
 | --- | --- |
 | Studio | Project explorer, VI tabs, paired Front Panel / Block Diagram editors, split view, searchable palettes, context help, properties, errors and keyboard commands |
-| Front panel | Numeric controls, knobs, sliders, gauges, switches, LEDs, strings, numeric arrays, waveform graphs/charts, cursors, positioning and resizing |
+| Front panel | Numeric controls, knobs, sliders, gauges, switches, LEDs, strings, numeric arrays, waveform graphs/charts, error-cluster and complex controls/indicators, cursors, positioning and resizing |
 | Diagram | Typed named terminals, single-driver input wiring, output fan-out, drag/marquee selection, pan/zoom, duplication, deletion, probes and undo/redo |
 | Structures | Multi-case dispatch, sequential frames/locals, For/While/Boolean Case/embedded SubVI contracts; typed ordinary tunnels; numeric input/output indexing; conditional collection; array concatenation; stacked register state |
 | Execution | Cached topological plans, explicit feedback, cooperative nested activations, shared budgets, run/continuous/pause/abort, step-over/step-into and nested breakpoints, scoped cross-VI probes and session-only debug options |
 | Functions | Arithmetic/transcendentals, Boolean logic, typed Select, Unicode string transforms, numeric array transforms, waveform construction, simulated signals, filtering, RMS, peak-to-peak FFT, compiled scalar formulas, errors and complex arithmetic |
 | Documents | Version-3 JSON, version-1/2 migration, source-generated serialization, bounded imports/history, waveform CSV, browser IndexedDB and native recovery |
 
-Seven executable examples are included: **Signal Analysis.vi**, **Arithmetic.vi**, **Stateful Loop.vi**, **Indexed Accumulator.vi**, **Case Dispatch.vi**, **Sequence Pipeline.vi**, and **Errors and Complex.vi**. The plots and indicators display results from their real dataflow graphs, not decorative sample animation. Acquisition is explicitly simulated.
+Eight executable examples are included: **Signal Analysis.vi**, **Arithmetic.vi**, **Stateful Loop.vi**, **Indexed Accumulator.vi**, **Case Dispatch.vi**, **Sequence Pipeline.vi**, **Errors and Complex.vi**, and **Formula Control Flow.vi**. The plots and indicators display results from their real dataflow graphs, not decorative sample animation. Acquisition is explicitly simulated.
 
 Press **Ctrl+Space**, search for a function/control, press **Enter**, then click to place it. **Escape** cancels without editing. Right-click a canvas for the corresponding context palette. **Ctrl+E** switches editors; **Ctrl+R** runs; **F6** runs continuously; **F10/F11** step over/into; **Ctrl+F11** steps out. Canvas undo and clipboard commands do not replace text-field editing behavior.
 
@@ -64,12 +64,12 @@ Run `tools/LabSpace.Benchmarks` for reproducible engine/FFT timing and allocatio
 | --- | --- |
 | `LabSpace.Core` | Models, immutable typed values, node catalog, named terminals and immutable structure contracts |
 | `LabSpace.Signals` | Signal generation, transformations, filtering, stable RMS and FFT |
-| `LabSpace.Dataflow` | Graph validation/compilation, named-output execution, nested activations, register/feedback state and budgets |
+| `LabSpace.Dataflow` | Graph validation/compilation, bounded formula bytecode, named-output execution, nested activations, register/feedback state and budgets |
 | `LabSpace.Documents` | Versioned source-generated JSON, validation/migration and executable examples |
 | `LabSpace.Editing` | UI-independent editing, transactions, history, wiring, connector synchronization and debugging session |
 | `LabSpace.Skia` | Instrument/diagram rendering, geometry, cached previews, icons and plot decimation |
 | `LabSpace.Storage` | Host-neutral storage contract and protected recovery behavior |
-| `LabSpace.Controls` | Uno canvases, chrome, palette, Quick Drop, staged connector editor and property inspector |
+| `LabSpace.Controls` | Uno canvases, chrome, palette, Quick Drop, staged editors, cross-VI Debug window and property inspector |
 | `LabSpace.Workbench` | Complete reusable studio, commands, navigation, execution and recovery scheduling |
 
 All nine libraries are packable. NuGet packages and symbols are workflow artifacts; this does **not** imply publication to a public NuGet feed. The host application and tests are not library packages.
