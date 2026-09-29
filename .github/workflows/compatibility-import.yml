@@ -1,0 +1,47 @@
+name: Import compatibility source and validate
+on:
+  push:
+    branches: [feat/advanced-structures-0.3]
+    paths: ['.compatibility-import/**', '.github/workflows/compatibility-import.yml']
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  import:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feat/advanced-structures-0.3
+      - name: Apply verified source patch
+        run: |
+          python3 - <<'PY'
+          import base64,lzma,hashlib,subprocess
+          from pathlib import Path
+          parts=sorted(Path('.compatibility-import').glob('*.b64'))
+          assert len(parts)==8
+          patch=lzma.decompress(base64.b64decode(''.join(p.read_text().strip() for p in parts)))
+          assert hashlib.sha256(patch).hexdigest()=='bc817414165242ff0a932ad2ef7442309fbffde07c33973418ac07ec610a9f4b'
+          subprocess.run(['git','apply','--binary','-'],input=patch,check=True)
+          PY
+          git rm -r .compatibility-import .github/workflows/compatibility-import.yml
+          git add .
+          git config user.name "Wiesław Šoltés"
+          git config user.email "wieslawsoltes@users.noreply.github.com"
+          git commit -m "feat: implement typed multi-case dispatch, sequence frames, formulas and classic editors"
+          git push origin HEAD:feat/advanced-structures-0.3
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+      - name: Engine validation
+        run: dotnet test tests/LabSpace.Tests -c Release --logger 'trx;LogFileName=engine.trx' --results-directory artifacts/tests
+      - name: Desktop compilation
+        run: |
+          python3 scripts/fetch-assets.py
+          dotnet build src/LabSpace.App -f net10.0-desktop -c Release -p:LabSpaceDesktopOnly=true
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: LabSpace-0.3-import-tests
+          path: artifacts/tests
