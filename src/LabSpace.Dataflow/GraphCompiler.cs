@@ -164,6 +164,6 @@ public static partial class GraphCompiler
         foreach (var node in outputs)
             if (!expected.TryGetValue(ConnectorName(node), out var kind) || kind != node.DataType) Error($"Output connector '{ConnectorName(node)}' does not match the structure contract.", node.Id);
         foreach (var (name, _) in expected)
-            if (!outputs.Any(n => ConnectorName(node) == name) && !c.Outputs.Any(t => t.Name == name && t.UseDefaultIfUnwired)) Error($"Missing output connector '{name}'.");
+            if (!outputs.Any(n => ConnectorName(n) == name) && !c.Outputs.Any(t => t.Name == name && t.UseDefaultIfUnwired)) Error($"Missing output connector '{name}'.");
     }
 }
