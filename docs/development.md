@@ -45,7 +45,7 @@ Browser workflows cover both editors, pointer wiring/dragging, undo, palette ins
 
 `engine.yml` is the lightweight engine gate. `build.yml` builds/tests the real browser application and builds the shared native host on Windows, Linux and macOS. Pages depends on successful browser and desktop jobs, checks the artifact's commit and runs the same browser acceptance against the public URL. Source snapshots and validation artifacts are retained in Actions.
 
-`release.yml` runs on matching main-branch package/toolchain changes, `v*` tags, or manual dispatch. It tests the engines, packs all nine libraries/symbols, audits resolved Skia versions, publishes a browser distribution and records benchmarks. Tagged runs attach assets to a GitHub prerelease. Successful packing is not NuGet-feed publication; the workflow does not automatically push packages there.
+`release.yml` runs on matching main-branch package/toolchain changes, `v*` tags, or manual dispatch. It tests the engines, publishes single-file desktop executables for six runtimes, packs all nine versioned libraries/symbols, audits resolved Skia versions, publishes a browser distribution and records benchmarks. Tagged runs attach assets to a GitHub Release and push the packages to NuGet.org via Trusted Publishing (`NuGet/login` OIDC in the `nuget` environment, account from the `NUGET_USER` variable); other runs publish nothing.
 
 ## Performance and extension rules
 

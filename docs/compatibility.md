@@ -44,4 +44,4 @@ Quick Drop follows NI's documented [search and cursor-placement workflow](https:
 
 Use this release for experimentation, education, graphical-programming prototypes and reusable-component development. Do not treat simulated values as acquired measurements or deploy this runtime for safety-critical/hard-real-time control. Hardware integrations require separate design and validation.
 
-Engine tests and real-pointer browser acceptance are automated. Three-OS desktop builds do not establish complete native-interaction compatibility. Headless browser rendering, including software GPU emulation, is not physical-GPU performance certification. Package artifacts do not imply NuGet-feed publication.
+Engine tests and real-pointer browser acceptance are automated. Three-OS desktop builds do not establish complete native-interaction compatibility. Headless browser rendering, including software GPU emulation, is not physical-GPU performance certification.

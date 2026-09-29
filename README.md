@@ -58,6 +58,20 @@ The workbench targets a 40 ms execution timer and yields nested work after 4,096
 
 Run `tools/LabSpace.Benchmarks` for reproducible engine/FFT timing and allocation measurements. These are managed-engine measurements, not GPU or UI frame times. See [architecture and performance](docs/architecture.md).
 
+## Download
+
+Every [release](https://github.com/wieslawsoltes/LabSpace/releases/latest) ships a self-contained, single-file desktop app — no .NET install needed:
+
+| OS | x64 | Arm64 |
+| --- | --- | --- |
+| Windows | `LabSpace-<version>-win-x64.zip` | `LabSpace-<version>-win-arm64.zip` |
+| macOS | `LabSpace-<version>-osx-x64.tar.gz` | `LabSpace-<version>-osx-arm64.tar.gz` |
+| Linux | `LabSpace-<version>-linux-x64.tar.gz` | `LabSpace-<version>-linux-arm64.tar.gz` |
+
+Extract and run `LabSpace` (`LabSpace.exe` on Windows). Builds are not code-signed yet: on macOS clear the quarantine flag with `xattr -d com.apple.quarantine LabSpace`; on Windows choose **More info → Run anyway** in SmartScreen. Verify downloads against `SHA256SUMS`. Releases also include the browser distribution and engine benchmarks.
+
+The libraries below are published to [NuGet.org](https://www.nuget.org/packages?q=LabSpace), e.g. `dotnet add package LabSpace.Core`.
+
 ## Reusable libraries
 
 | Package | Responsibility |
@@ -72,7 +86,7 @@ Run `tools/LabSpace.Benchmarks` for reproducible engine/FFT timing and allocatio
 | `LabSpace.Controls` | Uno canvases, chrome, palette, Quick Drop, staged editors, cross-VI Debug window and property inspector |
 | `LabSpace.Workbench` | Complete reusable studio, commands, navigation, execution and recovery scheduling |
 
-All nine libraries are packable. NuGet packages and symbols are workflow artifacts; this does **not** imply publication to a public NuGet feed. The host application and tests are not library packages.
+All nine libraries are published to NuGet.org with symbols. The host application and tests are not library packages.
 
 ### Use the engine independently
 
@@ -135,7 +149,7 @@ See [development](docs/development.md) for dependencies, packaging, base paths, 
 
 GitHub Actions runs engine tests, three-OS desktop builds, a real Uno browser publish, keyboard/pointer acceptance, screenshot capture, and Pages deployment with a source-commit check. The same browser workflows run against the public deployment. Browser tests inspect read-only diagnostics but edit the application using real input; they do not call private model-mutating test functions.
 
-The release workflow packages all nine libraries and symbols, audits resolved Skia versions, publishes a browser distribution and records engine benchmarks. Tagged runs create a GitHub prerelease. Signed desktop installers and physical hardware/GPU certification are not included.
+The release workflow runs for `v*` tags, matching main-branch changes or a supplied manual version. It runs storage and engine tests, publishes self-contained single-file desktop executables for Windows, macOS and Linux (x64 and arm64), packs all nine versioned libraries with symbols, audits resolved Skia versions, publishes a browser distribution, records engine benchmarks and emits `SHA256SUMS`. Tags attach all assets to a GitHub Release (prerelease for `-` versions) and publish the packages to NuGet.org with [Trusted Publishing](https://learn.microsoft.com/nuget/nuget-org/trusted-publishing) (OIDC, no stored API key) from the protected `nuget` environment. Other runs are dry runs: they build and upload every asset as workflow artifacts but publish nothing. Code-signed desktop installers and physical hardware/GPU certification are not included.
 
 ## Files, safety and licensing
 

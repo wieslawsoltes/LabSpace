@@ -87,4 +87,4 @@ var formula = FormulaProgram.Compile("result = sqrt(x*x + 16);", new FormulaSign
 Console.WriteLine(formula.Evaluate(_ => 3)["result"]); // 5
 ```
 
-The nine package boundaries remain unchanged. Frames, signatures and new values are represented by the Core/Dataflow/Documents packages; staged edits belong to Editing; canvas geometry/rendering to Skia; editors to Controls; command composition to Workbench. Document format 3 migrates versions 1 and 2. Package artifacts do not imply NuGet-feed publication.
+The nine package boundaries remain unchanged. Frames, signatures and new values are represented by the Core/Dataflow/Documents packages; staged edits belong to Editing; canvas geometry/rendering to Skia; editors to Controls; command composition to Workbench. Document format 3 migrates versions 1 and 2.
