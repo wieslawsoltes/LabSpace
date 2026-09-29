@@ -10,7 +10,7 @@ public readonly record struct RectD(double X, double Y, double Width, double Hei
 
 public sealed class LabProject
 {
-    public int FormatVersion { get; set; } = 2;
+    public int FormatVersion { get; set; } = 3;
     public string Name { get; set; } = "Untitled project";
     public List<VirtualInstrument> Instruments { get; set; } = [];
 }
@@ -45,6 +45,11 @@ public sealed class Node
     public StructureContract? Contract { get; set; }
     public Diagram? Body { get; set; }
     public Diagram? Alternative { get; set; }
+    public List<StructureFrame> Frames { get; set; } = [];
+    public int VisibleFrame { get; set; }
+    public double Width { get; set; }
+    public double Height { get; set; }
+    public FormulaSignature? Formula { get; set; }
     public double Parameter(string name, double fallback) => Parameters.TryGetValue(name, out var result) ? result : fallback;
 }
 

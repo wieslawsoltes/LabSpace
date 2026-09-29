@@ -97,7 +97,7 @@ public sealed partial class InstrumentWorkbench : UserControl, IDisposable
         _errorsHost.Child = new ScrollViewer { Content = _errors, MaxHeight = 155 }; _errorsHost.Background = LabTheme.Brush("#FFF9EF"); _errorsHost.Visibility = Visibility.Collapsed; Grid.SetRow(_errorsHost, 4); root.Children.Add(_errorsHost);
         var statusBar = new Grid { Background = LabTheme.Brush("#E5E5E5"), BorderBrush = LabTheme.Brush("#A5A5A5"), BorderThickness = new Thickness(0, 1, 0, 0) }; statusBar.ColumnDefinitions.Add(new() { Width = new(1, GridUnitType.Star) }); statusBar.ColumnDefinitions.Add(new() { Width = new(315) }); _status.Margin = new(8, 0, 8, 0); _metrics.Margin = new(8, 0, 8, 0); statusBar.Children.Add(_status); Grid.SetColumn(_metrics, 1); statusBar.Children.Add(_metrics); Grid.SetRow(statusBar, 5); root.Children.Add(statusBar);
         SizeChanged += (_, _) => { _middle.ColumnDefinitions[0].Width = ActualWidth < 1100 ? new(0) : new(185); _middle.ColumnDefinitions[2].Width = ActualWidth < 760 ? new(190) : new(245); _title.Visibility = ActualWidth < 900 ? Visibility.Collapsed : Visibility.Visible; };
-        InitializeCompatibility(root, tools); AddAccelerators(); Session.Changed += OnChanged;
+        InitializeCompatibility(root, tools); InitializeDebugger(root, tools); AddAccelerators(); Session.Changed += OnChanged;
         _executionTimer.Tick += (_, _) => { if (!_dialogOpen) Session.Tick(); }; _executionTimer.Start();
         _recoveryTimer.Tick += (_, _) => Forget(SaveRecoveryAsync()); _recoveryTimer.Start();
         ShowProperties(false); RebuildProject(); ApplyView(); OnChanged(SessionChange.All); SetHelp(null);
@@ -126,7 +126,7 @@ public sealed partial class InstrumentWorkbench : UserControl, IDisposable
         }
         Menu("File", ("New VI\tCtrl+N", Session.NewInstrument), ("Open project…\tCtrl+O", () => Forget(OpenAsync())), ("Save project…\tCtrl+S", () => Forget(SaveAsync())), ("Export waveform CSV…", () => Forget(ExportAsync())), ("Load example project", () => Forget(LoadExamplesAsync())));
         Menu("Edit", ("Undo\tCtrl+Z", Session.Undo), ("Redo\tCtrl+Y", Session.Redo), ("Copy\tCtrl+C", Session.Copy), ("Paste\tCtrl+V", Session.Paste), ("Duplicate\tCtrl+D", () => { Session.Copy(); Session.Paste(); }), ("Delete selection", Session.Delete), ("Select all", Session.SelectAll));
-        Menu("View", ("Front Panel", () => SetView(StudioView.FrontPanel)), ("Block Diagram\tCtrl+E", () => SetView(StudioView.BlockDiagram)), ("Split views", () => SetView(StudioView.Split)), ("Fit to window", Fit), ("100% zoom", () => { FrontPanel.SetZoom(1); BlockDiagram.SetZoom(1); }), ("Properties", () => ShowProperties(true)), ("Error list", ToggleErrors));
+        Menu("View", ("Front Panel", () => SetView(StudioView.FrontPanel)), ("Block Diagram\tCtrl+E", () => SetView(StudioView.BlockDiagram)), ("Split views", () => SetView(StudioView.Split)), ("Fit to window", Fit), ("100% zoom", () => { FrontPanel.SetZoom(1); BlockDiagram.SetZoom(1); }), ("Properties", () => ShowProperties(true)), ("Error list", ToggleErrors), ("Debug window", () => ShowDebugWindow(!DebugWindowVisible)));
         Menu("Project", ("New virtual instrument", Session.NewInstrument), ("VI properties…", () => Forget(EditInstrumentAsync())), ("Parent diagram", () => Session.Leave()));
         Menu("Operate", ("Run\tCtrl+R", RunOrShowErrors), ("Run continuously\tF6", () => Session.Run(true)), ("Abort execution", Session.Abort), ("Pause / resume", Session.Pause), ("Single step\tF10", Session.Step), ("Set / remove breakpoint", Session.ToggleBreakpoint));
         Menu("Tools", ("Clean up diagram", () => { Session.AutoLayout(); BlockDiagram.Fit(); }), ("Attach / remove wire probe", Session.ToggleProbe), ("Toggle panel editing", () => { Session.PanelEditMode = !Session.PanelEditMode; Session.Notify(); }), ("Validate diagram", () => { Session.Validate(); ToggleErrors(); }));
@@ -174,6 +174,7 @@ public sealed partial class InstrumentWorkbench : UserControl, IDisposable
     private void OnChanged(SessionChange change)
     {
         UpdateCompatibility();
+        UpdateDebugger(change);
         _status.Text = Session.Status.Replace('\n', ' '); _status.Foreground = LabTheme.Brush(Session.Diagnostics.Count > 0 ? "#AC3229" : "#363636");
         _metrics.Text = $"{Session.LastMilliseconds:F2} ms  |  {Session.LastNodeCount} nodes  |  frame {Session.Frames}  |  Skia";
         _title.Text = Session.Instrument.Name + (Session.Dirty ? " *" : "") + " — LabSpace";
@@ -223,15 +224,18 @@ public sealed partial class InstrumentWorkbench : UserControl, IDisposable
         }
         if (Session.Diagnostics.Count == 0) _errors.Children.Add(LabTheme.Text("No compile errors. The diagram is ready to run.", 12, "#276B31"));
     }
-    private void ToggleErrors() { BuildErrors(); _errorsHost.Visibility = _errorsHost.Visibility == Visibility.Visible ? Visibility.Collapsed : Visibility.Visible; }
+    private void ToggleErrors() { ShowDebugWindow(false); BuildErrors(); _errorsHost.Visibility = _errorsHost.Visibility == Visibility.Visible ? Visibility.Collapsed : Visibility.Visible; }
     private async void EditNode(Node node)
     {
-        if (_dialogOpen) return; _dialogOpen = true;
+        if (_dialogOpen) return;
+        if (node.Kind == "formula") { OpenFormula(node); return; }
+        if (node.Kind is "error-control" or "error-constant") { OpenError(node); return; }
+        if (node.Kind is "complex-control" or "complex") { OpenComplex(node); return; } _dialogOpen = true;
         try
         {
-            var kind = NodeCatalog.Get(node.Kind); var editable = kind.IsControl || node.Kind is "constant" or "bool" or "string" or "array" or "input" or "output";
+            var kind = NodeCatalog.Get(node.Kind); var editable = kind.IsControl || node.Kind is "constant" or "bool" or "string" or "array" or "input" or "output" or "sequence-read" or "sequence-write";
             if (!editable) { ShowProperties(true); return; }
-            var isText = node.Kind is "string" or "string-control" or "array" or "input" or "output";
+            var isText = node.Kind is "string" or "string-control" or "array" or "input" or "output" or "sequence-read" or "sequence-write";
             var box = new LabTextBox(isText ? node.Text : node.Value.ToString("G17", CultureInfo.InvariantCulture), node.Label) { MinWidth = 290 };
             var dialog = new ContentDialog { XamlRoot = XamlRoot, Title = node.Label, Content = box, PrimaryButtonText = "Apply", CloseButtonText = "Cancel", DefaultButton = ContentDialogButton.Primary };
             dialog.Opened += (_, _) => { box.Focus(FocusState.Programmatic); box.SelectAll(); };
@@ -306,6 +310,6 @@ public sealed partial class InstrumentWorkbench : UserControl, IDisposable
     }
     public new void Dispose()
     {
-        if (_disposed) return; _disposed = true; _executionTimer.Stop(); _recoveryTimer.Stop(); Session.Abort(); Session.Changed -= OnChanged; FrontPanel.Dispose(); BlockDiagram.Dispose(); Inspector.Dispose();
+        if (_disposed) return; _disposed = true; _debugTimer.Stop(); _executionTimer.Stop(); _recoveryTimer.Stop(); Session.Abort(); Session.Changed -= OnChanged; FrontPanel.Dispose(); BlockDiagram.Dispose(); Inspector.Dispose();
     }
 }

@@ -4,8 +4,8 @@ using LabSpace.Documents;
 
 namespace LabSpace.Editing;
 
-[Flags] public enum SessionChange { None = 0, View = 1, Selection = 2, Document = 4, Execution = 8, Navigation = 16, All = 31 }
-public sealed record NavigationLevel(string NodeId, bool Alternative);
+[Flags] public enum SessionChange { None = 0, View = 1, Selection = 2, Document = 4, Execution = 8, Navigation = 16, Debug = 32, All = 63 }
+public sealed record NavigationLevel(string NodeId, bool Alternative, int FrameIndex = -1);
 
 /// <summary>UI-independent command and execution session. A caller-owned timer invokes Tick; no background thread touches the document.</summary>
 public sealed partial class InstrumentSession
@@ -29,7 +29,7 @@ public sealed partial class InstrumentSession
             foreach (var level in _path)
             {
                 var n = graph.Nodes.FirstOrDefault(n => n.Id == level.NodeId);
-                var child = level.Alternative ? n?.Alternative : n?.Body;
+                var child = ResolveChild(n, level);
                 if (child is null) return Instrument.Diagram;
                 graph = child;
             }
@@ -41,7 +41,15 @@ public sealed partial class InstrumentSession
     public IReadOnlyDictionary<string, Value> Values { get; private set; } = new Dictionary<string, Value>();
     public IReadOnlyDictionary<SourceTerminal, Value> OutputValues { get; private set; } = new Dictionary<SourceTerminal, Value>();
     public ExecutionFrame? DebugFrame => _frame?.ActiveFrame;
-    public Value? OutputValue(string node, string output = "result") => OutputValues.TryGetValue(new(node, output), out var value) ? value : output == "result" ? Values.GetValueOrDefault(node) : null;
+    public Value? OutputValue(string node, string output = "result")
+    {
+        var path = VisibleDebugPath;
+        if (LiveFrameAt(path) is { } live)
+            return Lookup(live.Values, live.Outputs, node, output);
+        if (_path.Count == 0) return Lookup(Values, OutputValues, node, output);
+        return _retained.TryGetValue(new(ActiveId, path), out var retained)
+            ? Lookup(retained.Values, retained.Outputs, node, output) : null;
+    }
     public Dictionary<string, Queue<double>> ChartHistory { get; } = [];
     public IReadOnlyList<Diagnostic> Diagnostics { get; private set; } = [];
     public long Revision { get; private set; }
@@ -58,7 +66,7 @@ public sealed partial class InstrumentSession
     public long Frames => _runtime.Frames;
     public string Status { get; private set; } = "Ready";
     public event Action<SessionChange>? Changed;
-    public InstrumentSession(LabProject project) { ProjectSerializer.Validate(project); Project = project; ActiveId = project.Instruments[0].Id; Validate(); }
+    public InstrumentSession(LabProject project) { ProjectSerializer.Validate(project); Project = project; ActiveId = project.Instruments[0].Id; _runtime.FrameCompleted += CaptureDebugFrame; Validate(); }
     public Node? Find(string? id) => Diagram.Nodes.FirstOrDefault(n => n.Id == id);
     public Node? SelectedNode => Selection.Count == 1 ? Find(Selection.First()) : null;
     public void Notify(SessionChange change = SessionChange.View) => Changed?.Invoke(change);
@@ -77,10 +85,12 @@ public sealed partial class InstrumentSession
         if (!Project.Instruments.Any(v => v.Id == id)) return;
         Abort(); ActiveId = id; _path.Clear(); Selection.Clear(); SelectedWire = null; ResetExecution(); Validate(); Notify(SessionChange.All);
     }
-    public void Enter(string id, bool alternative = false)
+    public void Enter(string id, bool alternative = false, int frameIndex = -1)
     {
-        var n = Find(id); if ((alternative ? n?.Alternative : n?.Body) is null) return;
-        Abort(); _path.Add(new(id, alternative)); Selection.Clear(); SelectedWire = null; ResetExecution(); Validate(); Notify(SessionChange.All);
+        var n = Find(id);
+        var level = new NavigationLevel(id, alternative, n is not null && StructureFrames.HasFrames(n) ? frameIndex < 0 ? n.VisibleFrame : frameIndex : -1);
+        if (ResolveChild(n, level) is null) return;
+        Abort(); _path.Add(level); Selection.Clear(); SelectedWire = null; ResetExecution(); Validate(); Notify(SessionChange.All);
     }
     public void Leave()
     {
@@ -89,7 +99,7 @@ public sealed partial class InstrumentSession
     }
     public void Replace(LabProject project)
     {
-        ProjectSerializer.Validate(project); Abort(); Project = project; ActiveId = project.Instruments[0].Id; _path.Clear(); _undo.Clear(); _redo.Clear(); Selection.Clear(); SelectedWire = null; Dirty = false; Revision++; ResetExecution(); Validate(); Notify(SessionChange.All);
+        ProjectSerializer.Validate(project); Abort(); Project = project; ActiveId = project.Instruments[0].Id; _path.Clear(); _undo.Clear(); _redo.Clear(); Selection.Clear(); SelectedWire = null; Dirty = false; Revision++; ClearDebugger(); ResetExecution(); Validate(); Notify(SessionChange.All);
     }
     public void NewInstrument()
     {
@@ -110,12 +120,13 @@ public sealed partial class InstrumentSession
     private void Touch(bool code)
     {
         Revision++; Dirty = true;
-        if (code) { ResetExecution(); Validate(); }
+        if (code) { ClearDebugValues(ActiveId); ResetExecution(); Validate(); }
         Notify(SessionChange.Document | SessionChange.View | SessionChange.Selection);
     }
     private void Restore(string snapshot)
     {
         Project = ProjectSerializer.Load(snapshot);
+        ClearDebugValues();
         if (!Project.Instruments.Any(x => x.Id == ActiveId)) { ActiveId = Project.Instruments[0].Id; _path.Clear(); }
         Selection.IntersectWith(Diagram.Nodes.Select(x => x.Id)); SelectedWire = null; ResetExecution(); Validate();
     }
@@ -143,8 +154,8 @@ public sealed partial class InstrumentSession
             result = Examples.NewNode(kind, x, y); Diagram.Nodes.Add(result); var def = NodeCatalog.Get(kind);
             if (_path.Count == 0 && (def.IsControl || def.IsIndicator))
             {
-                var visual = widget ?? (kind is "graph" or "chart" ? "Graph" : def.Output == ValueKind.Boolean ? (def.IsControl ? "Switch" : "LED") : def.Output == ValueKind.String ? "String" : def.Output == ValueKind.Array ? "Array" : "Numeric");
-                Instrument.Panel.Add(new() { NodeId = result.Id, Widget = visual, Bounds = new(panelPosition?.X ?? 35 + Instrument.Panel.Count % 4 * 185, panelPosition?.Y ?? 70 + Instrument.Panel.Count / 4 * 155, visual is "Graph" or "Chart" ? 410 : 160, visual is "Graph" or "Chart" ? 240 : visual == "Knob" ? 175 : 95), Minimum = 0, Maximum = 100 });
+                var visual = widget ?? (kind is "graph" or "chart" ? "Graph" : def.Output == ValueKind.Boolean ? (def.IsControl ? "Switch" : "LED") : def.Output == ValueKind.String ? "String" : def.Output == ValueKind.Array ? "Array" : def.Output == ValueKind.Error ? "Error" : def.Output == ValueKind.Complex ? "Complex" : "Numeric");
+                Instrument.Panel.Add(new() { NodeId = result.Id, Widget = visual, Bounds = new(panelPosition?.X ?? 35 + Instrument.Panel.Count % 4 * 185, panelPosition?.Y ?? 70 + Instrument.Panel.Count / 4 * 155, visual is "Graph" or "Chart" ? 410 : visual == "Error" ? 300 : visual == "Complex" ? 240 : 160, visual is "Graph" or "Chart" ? 240 : visual == "Knob" ? 175 : visual == "Error" ? 160 : visual == "Complex" ? 110 : 95), Minimum = 0, Maximum = 100 });
             }
         }); Select(result!.Id); return result;
     }
@@ -157,7 +168,7 @@ public sealed partial class InstrumentSession
         {
             Diagram.Wires.RemoveAll(w => w.To == to && w.Input == input);
             Diagram.Wires.Add(new() { From = from, To = to, Input = input, Output = output });
-            var error = GraphCompiler.Validate(Diagram).FirstOrDefault(e => e.Code is "CYCLE" or "TYPE" or "DRIVER");
+            var error = GraphCompiler.Validate(Instrument.Diagram).FirstOrDefault(e => e.Code is "CYCLE" or "TYPE" or "DRIVER");
             if (error is not null) throw new ArgumentException(error.Message);
         }); Message("Wire connected");
     }
@@ -172,14 +183,14 @@ public sealed partial class InstrumentSession
         });
     }
     public void SetValue(string id, double value) { if (!double.IsFinite(value)) throw new ArgumentException("Enter a finite number."); Edit(() => { var n = Find(id); if (n is not null) n.Value = value; }, false); }
-    public void SetText(string id, string text) => Edit(() => { var n = Find(id); if (n is not null) n.Text = text; }, Find(id)?.Kind is "input" or "output");
-    public void ToggleProbe() { var w = Diagram.Wires.FirstOrDefault(w => w.Id == SelectedWire); if (w is not null) Edit(() => w.Probe = !w.Probe, false); }
-    public void ToggleBreakpoint() { var n = SelectedNode; if (n is not null) Edit(() => n.Breakpoint = !n.Breakpoint, false); }
+    public void SetText(string id, string text) => Edit(() => { var n = Find(id); if (n is not null) n.Text = text; }, Find(id)?.Kind is "input" or "output" or "sequence-read" or "sequence-write" or "formula");
+    public void ToggleProbe() { if (SelectedWire is { } id) ToggleProbe(id); }
+    public void ToggleBreakpoint() { if (SelectedNode is { } node) ToggleBreakpoint(node.Id); }
     public void Copy()
     {
         var source = ProjectSerializer.Clone(new() { Name = "Clipboard", Instruments = [Instrument] }).Instruments[0];
         var graph = source.Diagram;
-        foreach (var step in _path) { var node = graph.Nodes.First(x => x.Id == step.NodeId); graph = step.Alternative ? node.Alternative! : node.Body!; }
+        foreach (var step in _path) { var node = graph.Nodes.First(x => x.Id == step.NodeId); graph = ResolveChild(node, step)!; }
         source.Diagram = graph; graph.Nodes.RemoveAll(n => !Selection.Contains(n.Id)); graph.Wires.RemoveAll(w => !Selection.Contains(w.From) || !Selection.Contains(w.To)); source.Panel.RemoveAll(p => !Selection.Contains(p.NodeId));
         if (_path.Count > 0) source.Panel.Clear();
         _clipboard = ProjectSerializer.Save(new() { Name = "Clipboard", Instruments = [source] }); Message($"Copied {graph.Nodes.Count} nodes");
@@ -208,16 +219,16 @@ public sealed partial class InstrumentSession
             foreach (var group in Diagram.Nodes.GroupBy(n => rank[n.Id])) { var row = 0; foreach (var n in group) { n.X = 55 + group.Key * 360; n.Y = 65 + row++ * 230; } }
         }, false);
     }
-    public void Validate() { _plan = null; Diagnostics = GraphCompiler.Validate(Diagram); }
-    private CompiledGraph Plan() => _plan ??= GraphCompiler.Compile(Diagram);
-    private void ResetExecution() { _plan = null; _frame = null; _runtime.Reset(); ChartHistory.Clear(); Values = new Dictionary<string, Value>(); OutputValues = new Dictionary<SourceTerminal, Value>(); ActiveNode = null; }
+    public void Validate() { _plan = null; Diagnostics = GraphCompiler.Validate(Instrument.Diagram); }
+    private CompiledGraph Plan() => _plan ??= GraphCompiler.Compile(Instrument.Diagram);
+    private void ResetExecution() { _plan = null; _frame = null; _runtime.Reset(); ChartHistory.Clear(); Values = new Dictionary<string, Value>(); OutputValues = new Dictionary<SourceTerminal, Value>(); ActiveNode = null; RestoreRetainedRoot(); }
     public void Run(bool continuous = false)
     {
-        _continuous = continuous; IsPaused = false; IsRunning = true; Pump();
+        _stepOutTarget = null; _continuous = continuous; IsPaused = false; IsRunning = true; Pump();
     }
     public void Tick() { if (IsRunning && !IsPaused) Pump(); }
     public void Pause() { if (!IsRunning && !IsPaused) return; IsPaused = !IsPaused; IsRunning = true; Message(IsPaused ? "Execution paused" : "Execution resumed"); }
-    public void Abort() { IsRunning = false; IsPaused = false; _continuous = false; _frame = null; _skipBreakpoint = null; ActiveNode = null; Status = "Ready"; Notify(SessionChange.Execution | SessionChange.View); }
+    public void Abort() { IsRunning = false; IsPaused = false; _continuous = false; _stepOutTarget = null; _frame = null; _skipBreakpoint = null; ActiveNode = null; Status = "Ready"; Notify(SessionChange.Execution | SessionChange.View); }
     private void Pump()
     {
         try
@@ -227,9 +238,14 @@ public sealed partial class InstrumentSession
             do
             {
                 var active = _frame.ActiveFrame; var model = active.NextNode; var next = model is null ? null : active.Path + "/" + model.Id;
-                if (model?.Breakpoint == true && !active.IsInsideStructure && _skipBreakpoint != next) { _skipBreakpoint = next; IsPaused = true; ActiveNode = model.Id; Status = $"Breakpoint: {model.Label}"; PublishFrame(); return; }
+                if (DebuggingEnabled && model is not null && BreakpointAt(ActiveId, active.Path, model) && !active.IsInsideStructure && _skipBreakpoint != next) { _skipBreakpoint = next; IsPaused = true; ActiveNode = model.Id; Status = $"Breakpoint: {model.Label}"; PublishFrame(); return; }
                 _skipBreakpoint = null; _frame.StepInto(); steps++;
-                if (!_frame.Completed && (Highlight || steps >= 4096 || (steps >= 16 && slice.Elapsed.TotalMilliseconds >= 8))) break;
+                if (_stepOutTarget?.Completed == true)
+                {
+                    _stepOutTarget = null;
+                    if (!_frame.Completed) { IsRunning = false; IsPaused = true; PublishFrame(); Status = "Step out · paused in caller"; Notify(SessionChange.Execution | SessionChange.View); return; }
+                }
+                if (!_frame.Completed && ((DebuggingEnabled && Highlight) || steps >= 4096 || (steps >= 16 && slice.Elapsed.TotalMilliseconds >= 8))) break;
             } while (!_frame.Completed);
             PublishFrame();
             if (_frame.Completed) { CompleteFrame(); _frame = null; IsRunning = _continuous; Status = _continuous ? "Running continuously · SIMULATED" : "Execution complete"; }
@@ -239,16 +255,17 @@ public sealed partial class InstrumentSession
     }
     public void Step()
     {
-        try { IsRunning = false; IsPaused = true; _frame ??= _runtime.Start(Plan()); _frame.Step(); PublishFrame(); if (_frame.Completed) { CompleteFrame(); _frame = null; IsPaused = false; } Status = IsPaused ? "Single step · paused" : "Execution complete"; Notify(SessionChange.Execution | SessionChange.View); }
+        if (!DebuggingEnabled) { Message("Enable debugging to single-step this VI."); return; }
+        try { _stepOutTarget = null; IsRunning = false; IsPaused = true; _frame ??= _runtime.Start(Plan()); _frame.Step(); PublishFrame(); if (_frame.Completed) { CompleteFrame(); _frame = null; IsPaused = false; } Status = IsPaused ? "Single step · paused" : "Execution complete"; Notify(SessionChange.Execution | SessionChange.View); }
         catch (Exception e) { ExecutionError(e); }
     }
     private void PublishFrame()
     {
-        if (_frame is null) return; Values = _frame.Values; OutputValues = _frame.Outputs; ActiveNode = _frame.ActiveFrame.LastNodeId ?? _frame.LastNodeId; LastMilliseconds = _frame.ElapsedMilliseconds; LastNodeCount = _frame.EvaluatedNodes; Notify(SessionChange.Execution | SessionChange.View);
+        if (_frame is null) return; Values = _frame.Values; OutputValues = _frame.Outputs; ActiveNode = IsPaused && _skipBreakpoint is not null ? _frame.ActiveFrame.NextNodeId : _frame.ActiveFrame.LastNodeId ?? _frame.LastNodeId; LastMilliseconds = _frame.ElapsedMilliseconds; LastNodeCount = _frame.EvaluatedNodes; Notify(SessionChange.Execution | SessionChange.View);
     }
     private void CompleteFrame()
     {
-        foreach (var node in Diagram.Nodes.Where(n => n.Kind == "chart"))
+        foreach (var node in Instrument.Diagram.Nodes.Where(n => n.Kind == "chart"))
             if (Values.TryGetValue(node.Id, out var value))
             {
                 if (!ChartHistory.TryGetValue(node.Id, out var history)) ChartHistory[node.Id] = history = new();

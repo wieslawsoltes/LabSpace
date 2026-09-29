@@ -27,6 +27,8 @@ public sealed class FunctionPalette : Grid
         {
             entries.AddRange([
                 ("Numeric", "control", "Numeric", "Numeric", "DBL"), ("Numeric", "control", "Knob", "Knob", "◉"), ("Numeric", "control", "Slider", "Slider", "↔"),
+                ("Numeric", "complex-control", "Complex", "Complex control", "CDB"), ("Numeric", "complex-indicator", "Complex", "Complex indicator", "CDB"),
+                ("Clusters", "error-control", "Error", "Error cluster", "err"), ("Clusters", "error-indicator", "Error", "Error indicator", "err"),
                 ("Numeric", "indicator", "Numeric", "Indicator", "123"), ("Numeric", "indicator", "Gauge", "Gauge", "∩"),
                 ("Boolean", "bool-control", "Switch", "Push button", "T/F"), ("Boolean", "bool-indicator", "LED", "Round LED", "●"),
                 ("Graphs", "graph", "Graph", "Waveform graph", "~"), ("Graphs", "chart", "Chart", "Waveform chart", "~+"),

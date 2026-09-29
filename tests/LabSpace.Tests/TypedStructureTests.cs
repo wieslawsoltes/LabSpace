@@ -135,11 +135,11 @@ public sealed class TypedStructureTests
     [Fact] public void VersionTwoRoundTripsNamedPortsAndContracts()
     {
         var (vi, _) = Example(); var json = ProjectSerializer.Save(new() { Instruments = [vi] }); var project = ProjectSerializer.Load(json);
-        Assert.Equal(2, project.FormatVersion); Assert.Equal(json, ProjectSerializer.Save(project)); Assert.Equal(15, Run(project.Instruments[0]).Values[vi.Diagram.Nodes.Single(n => n.Kind == "indicator").Id].Number);
+        Assert.Equal(3, project.FormatVersion); Assert.Equal(json, ProjectSerializer.Save(project)); Assert.Equal(15, Run(project.Instruments[0]).Values[vi.Diagram.Nodes.Single(n => n.Kind == "indicator").Id].Number);
     }
     [Fact] public void VersionOneMigratesWithoutLosingTheGraph()
     {
-        var project = Examples.Create(); project.FormatVersion = 1; var loaded = ProjectSerializer.Load(ProjectSerializer.Save(project)); Assert.Equal(2, loaded.FormatVersion); Assert.Equal(13, loaded.Instruments[0].Diagram.Nodes.Count);
+        var project = Examples.Create(); project.FormatVersion = 1; var loaded = ProjectSerializer.Load(ProjectSerializer.Save(project)); Assert.Equal(3, loaded.FormatVersion); Assert.Equal(13, loaded.Instruments[0].Diagram.Nodes.Count);
     }
     [Fact] public void UnknownConnectorTypesAreRejectedByTheImporter()
     {

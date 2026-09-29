@@ -13,7 +13,10 @@ internal sealed class StructureActivation
     private readonly Dictionary<string, Value> _inputs = new(StringComparer.Ordinal);
     private readonly Dictionary<string, Value[]> _registers = new(StringComparer.Ordinal);
     private readonly Dictionary<string, List<double>> _collections = new(StringComparer.Ordinal);
-    private readonly CompiledGraph _body;
+    private CompiledGraph _body;
+    private readonly bool _sequence;
+    private readonly Dictionary<string, Value> _locals = new(StringComparer.Ordinal);
+    private int _sequenceIndex;
     private readonly string _path;
     private readonly int _count;
     private readonly bool _legacy;
@@ -27,8 +30,10 @@ internal sealed class StructureActivation
     {
         _runtime = runtime; _node = node; _budget = budget; _pending = pending;
         var n = node.Model; var alternative = n.Kind == "case" && !input("selector").Boolean;
-        _body = alternative ? node.Alternative! : node.Body!;
-        _path = parentPath + "/" + n.Id + (n.Kind == "case" ? alternative ? "/false" : "/true" : "");
+        _sequence = n.Kind == "sequence";
+        var selected = n.Kind == "case-multi" ? node.Cases!.Select(input("selector")) : 0;
+        _body = StructureFrames.HasFrames(n) ? node.Frames[selected] : alternative ? node.Alternative! : node.Body!;
+        _path = parentPath + "/" + n.Id + (n.Kind == "case" ? alternative ? "/false" : "/true" : n.Kind == "case-multi" ? "/case:" + n.Frames[selected].Id : "");
         _legacy = n.Contract is null;
         _count = n.Kind is "while" ? 10000 : n.Kind == "for" ? Count(input("count").Number) : 1;
         _legacyState = _legacy ? input(n.Kind == "subvi" ? "x" : "initial") : Value.Numeric(0);
@@ -61,11 +66,20 @@ internal sealed class StructureActivation
         {
             if (_iteration >= _count) { Finish(); return; }
             PrepareArguments();
-            Child = new(_runtime, _body, _budget, _arguments, _path, _pending);
+            Child = new(_runtime, _body, _budget, _arguments,
+                _sequence ? _path + "/frame:" + _node.Model.Frames[_sequenceIndex].Id : _path, _pending);
             return;
         }
         Child.StepInto();
         if (!Child.Completed) return;
+        if (_sequence)
+        {
+            foreach (var (name, id) in _body.ConnectorOutputs) Results[name] = Child.Values[id];
+            foreach (var (name, id) in _body.LocalOutputs) _locals["local:" + name] = Child.Values[id];
+            Child = null; _sequenceIndex++;
+            if (_sequenceIndex == _node.Frames.Count) { Finish(); return; }
+            _body = _node.Frames[_sequenceIndex]; return;
+        }
         Collect(Child);
         var conditional = _node.Model.Kind == "while" || _node.Model.Contract?.ConditionalFor == true;
         var stop = conditional && Child.Values[_body.ConditionNode!].Boolean;
@@ -81,6 +95,7 @@ internal sealed class StructureActivation
     private void PrepareArguments()
     {
         _arguments["i"] = Value.Numeric(_iteration); _arguments["N"] = Value.Numeric(_count);
+        if (_sequence) foreach (var (name, value) in _locals) _arguments[name] = value;
         if (_legacy) { _arguments["state"] = _arguments["x"] = _legacyState; return; }
         foreach (var t in _node.Model.Contract!.Inputs)
         {

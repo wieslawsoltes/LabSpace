@@ -54,7 +54,7 @@ public sealed class FrontPanelSurface : CanvasViewport
         else if (def.IsControl)
         {
             if (node.Kind == "bool-control") Safe(() => Session.SetValue(node.Id, node.Value == 0 ? 1 : 0));
-            else if (node.Kind == "string-control") EditRequested?.Invoke(node);
+            else if (node.Kind is "string-control" or "error-control" or "complex-control") EditRequested?.Invoke(node);
             else if (_item.Widget is "Knob" or "Slider") { Session.BeginGesture(); _operating = true; Canvas.CapturePointer(e.Pointer); }
             else if (_start.X < _bounds.X + 15)
             {
@@ -73,7 +73,7 @@ public sealed class FrontPanelSurface : CanvasViewport
         var p = ToWorld(e.GetCurrentPoint(Canvas).Position); var dx = p.X - _start.X; var dy = p.Y - _start.Y;
         if (_moving)
         {
-            _item.Bounds = _resize ? _bounds with { Width = Math.Max(80, Math.Round((_bounds.Width + dx) / 10) * 10), Height = Math.Max(_item.Widget is "Knob" or "Gauge" or "Graph" or "Chart" ? 140 : 70, Math.Round((_bounds.Height + dy) / 10) * 10) } : _bounds with { X = Math.Round((_bounds.X + dx) / 10) * 10, Y = Math.Round((_bounds.Y + dy) / 10) * 10 };
+            _item.Bounds = _resize ? _bounds with { Width = Math.Max(_item.Widget is "Error" or "Complex" ? 220 : 80, Math.Round((_bounds.Width + dx) / 10) * 10), Height = Math.Max(_item.Widget == "Error" ? 160 : _item.Widget == "Complex" ? 110 : _item.Widget is "Knob" or "Gauge" or "Graph" or "Chart" ? 140 : 70, Math.Round((_bounds.Height + dy) / 10) * 10) } : _bounds with { X = Math.Round((_bounds.X + dx) / 10) * 10, Y = Math.Round((_bounds.Y + dy) / 10) * 10 };
             Invalidate();
         }
         else if (_operating)

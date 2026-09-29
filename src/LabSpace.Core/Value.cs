@@ -1,9 +1,10 @@
 using System.Collections.Immutable;
 using System.Globalization;
+using System.Numerics;
 
 namespace LabSpace.Core;
 
-public enum ValueKind { Number, Boolean, String, Array, Waveform }
+public enum ValueKind { Number, Boolean, String, Array, Waveform, Error, Complex }
 
 /// <summary>Immutable runtime payload. Array factories copy caller buffers to prevent cross-wire mutation.</summary>
 public sealed record Value
@@ -15,7 +16,20 @@ public sealed record Value
     public ImmutableArray<double> Samples { get; private init; } = [];
     public double SampleRate { get; private init; } = 1;
     public double StartTime { get; private init; }
+    public ErrorCluster Error { get; private init; } = ErrorCluster.None;
+    public Complex Complex { get; private init; }
     private Value() { }
+    public static Value ErrorValue(bool status = false, int code = 0, string source = "") => new()
+    {
+        Kind = ValueKind.Error,
+        Error = new(status, code, String(source).Text)
+    };
+    public static Value ComplexValue(double real, double imaginary)
+    {
+        if (!double.IsFinite(real) || !double.IsFinite(imaginary))
+            throw new ArithmeticException("Complex components must be finite.");
+        return new() { Kind = ValueKind.Complex, Complex = new(real, imaginary) };
+    }
     public static Value Numeric(double value)
     {
         if (!double.IsFinite(value)) throw new ArithmeticException("The operation produced a non-finite number.");
@@ -40,6 +54,8 @@ public sealed record Value
         ValueKind.Number => Number.ToString("G7", CultureInfo.InvariantCulture),
         ValueKind.Boolean => Boolean ? "TRUE" : "FALSE",
         ValueKind.String => Text,
+        ValueKind.Error => $"{(Error.Status ? "Error" : Error.Code != 0 ? "Warning" : "No error")} {Error.Code}: {Error.Source}",
+        ValueKind.Complex => string.Create(CultureInfo.InvariantCulture, $"{Complex.Real:G7} { (Complex.Imaginary < 0 ? "−" : "+") } {Math.Abs(Complex.Imaginary):G7}i"),
         _ => $"{Samples.Length:N0} samples" + (Kind == ValueKind.Waveform ? $" · {SampleRate:G6} Hz" : "")
     };
 }

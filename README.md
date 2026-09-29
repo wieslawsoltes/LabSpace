@@ -16,13 +16,19 @@ Build front panels, connect typed block diagrams, inspect live values and run si
 
 ![LabSpace front panel](https://wieslawsoltes.github.io/LabSpace/screenshots/front-panel.png)
 
-## 0.2 — Typed structures and classic editing
+## 0.3 — Structured programs and cross-VI debugging
 
-**0.2.0-alpha.1** adds named typed tunnels, numeric auto-indexing, conditional/concatenating output collection and initialized/uninitialized stacked shift registers. Nested execution is resumable, with step-into, nested breakpoints and cancellation checks even inside empty bodies. The studio adds **Quick Drop**, cursor placement, a staged connector editor, compact terminals, named-output wiring, a broken Run arrow and cached previews drawn from each structure's actual body.
+**0.3.0-alpha.1** adds executable numeric/string/Boolean/error Case Structures, ordered sequence frames and typed sequence locals, a compiled scalar Formula Node, error-cluster and complex-number controls and functions. Staged editors validate changes before Apply, named terminals support right-click creation and branching, and nested debugging includes step-out. Structure frame selectors, actual-body previews and resize handles are shared by the desktop and browser editors.
 
-Open **Indexed Accumulator.vi** and Run: samples `1,2,3,4,5` produce a final sum of `15` and running sums `[1,3,6,10,15]`. Select the loop, open **Tunnels and shift registers**, turn off **Initialized**, and Apply. Run twice to obtain `15` then `30`. Undo restores initialization and its attached wire.
+Open **Case Dispatch.vi**: the command `run` selects a frame producing `42`. Open **Sequence Pipeline.vi**: an earlier frame writes `21`, a later formula computes `84`. **Errors and Complex.vi** displays a real typed error cluster and computes the magnitude of `3 + 4i` as `5`. Edit their case labels, formula, error code/source or real/imaginary components to change actual results. These are executable diagrams, not animations.
 
-![Typed structure and named outputs](https://wieslawsoltes.github.io/LabSpace/screenshots/typed-structure.png)
+**Formula Control Flow.vi** evaluates a bounded `for` loop with `continue` into separately wired results `84` and `9`. Open **View → Debug window** to inspect its probe, switch to another VI and use **Locate** to return. Debugging flags and probe/breakpoint overrides are session state: toggling them does not dirty source or create Undo records.
+
+![Cross-VI Debug window](https://wieslawsoltes.github.io/LabSpace/screenshots/debug-window.png)
+
+[Debugger guide](docs/debugger.md) · [Advanced structures guide](docs/advanced-structures.md) · [Typed loops and registers](docs/typed-structures.md) · [Compatibility ledger](docs/compatibility.md)
+
+![Sequence with executable frames](https://wieslawsoltes.github.io/LabSpace/screenshots/sequence.png)
 
 LabSpace is a working independent implementation inspired by the classic NI LabVIEW workflow. **It is not yet a complete, pixel-identical or binary-compatible LabVIEW replacement.** NI VIs, the entire G language, instrument drivers and real-time/FPGA targets are not implemented. The [compatibility ledger](docs/compatibility.md) records exact supported behavior and remaining boundaries. No NI source code, proprietary artwork, drivers or runtime are included.
 
@@ -31,16 +37,16 @@ LabSpace is a working independent implementation inspired by the classic NI LabV
 | Area | Working functionality |
 | --- | --- |
 | Studio | Project explorer, VI tabs, paired Front Panel / Block Diagram editors, split view, searchable palettes, context help, properties, errors and keyboard commands |
-| Front panel | Numeric controls, knobs, sliders, gauges, switches, LEDs, strings, numeric arrays, waveform graphs/charts, cursors, positioning and resizing |
+| Front panel | Numeric controls, knobs, sliders, gauges, switches, LEDs, strings, numeric arrays, waveform graphs/charts, error-cluster and complex controls/indicators, cursors, positioning and resizing |
 | Diagram | Typed named terminals, single-driver input wiring, output fan-out, drag/marquee selection, pan/zoom, duplication, deletion, probes and undo/redo |
-| Structures | For/While/Boolean Case/embedded SubVI contracts; typed ordinary tunnels; numeric input/output indexing; conditional collection; array concatenation; stacked register state |
-| Execution | Cached topological plans, explicit feedback, cooperative nested activations, shared budgets, run/continuous/pause/abort, step-over/step-into and nested breakpoints |
-| Functions | Arithmetic/transcendentals, Boolean logic, typed Select, Unicode string transforms, numeric array transforms, waveform construction, simulated signals, filtering, RMS, peak-to-peak and FFT |
-| Documents | Version-2 JSON, version-1 migration, source-generated serialization, bounded imports/history, waveform CSV, browser IndexedDB and native recovery |
+| Structures | Multi-case dispatch, sequential frames/locals, For/While/Boolean Case/embedded SubVI contracts; typed ordinary tunnels; numeric input/output indexing; conditional collection; array concatenation; stacked register state |
+| Execution | Cached topological plans, explicit feedback, cooperative nested activations, shared budgets, run/continuous/pause/abort, step-over/step-into and nested breakpoints, scoped cross-VI probes and session-only debug options |
+| Functions | Arithmetic/transcendentals, Boolean logic, typed Select, Unicode string transforms, numeric array transforms, waveform construction, simulated signals, filtering, RMS, peak-to-peak FFT, compiled scalar formulas, errors and complex arithmetic |
+| Documents | Version-3 JSON, version-1/2 migration, source-generated serialization, bounded imports/history, waveform CSV, browser IndexedDB and native recovery |
 
-Four executable examples are included: **Signal Analysis.vi**, **Arithmetic.vi**, **Stateful Loop.vi**, and **Indexed Accumulator.vi**. The plots and indicators display results from their real dataflow graphs, not decorative sample animation. Acquisition is explicitly simulated.
+Eight executable examples are included: **Signal Analysis.vi**, **Arithmetic.vi**, **Stateful Loop.vi**, **Indexed Accumulator.vi**, **Case Dispatch.vi**, **Sequence Pipeline.vi**, **Errors and Complex.vi**, and **Formula Control Flow.vi**. The plots and indicators display results from their real dataflow graphs, not decorative sample animation. Acquisition is explicitly simulated.
 
-Press **Ctrl+Space**, search for a function/control, press **Enter**, then click to place it. **Escape** cancels without editing. Right-click a canvas for the corresponding context palette. **Ctrl+E** switches editors; **Ctrl+R** runs; **F6** runs continuously; **F10/F11** step over/into. Canvas undo and clipboard commands do not replace text-field editing behavior.
+Press **Ctrl+Space**, search for a function/control, press **Enter**, then click to place it. **Escape** cancels without editing. Right-click a canvas for the corresponding context palette. **Ctrl+E** switches editors; **Ctrl+R** runs; **F6** runs continuously; **F10/F11** step over/into; **Ctrl+F11** steps out. Canvas undo and clipboard commands do not replace text-field editing behavior.
 
 ## Rendering and performance
 
@@ -58,12 +64,12 @@ Run `tools/LabSpace.Benchmarks` for reproducible engine/FFT timing and allocatio
 | --- | --- |
 | `LabSpace.Core` | Models, immutable typed values, node catalog, named terminals and immutable structure contracts |
 | `LabSpace.Signals` | Signal generation, transformations, filtering, stable RMS and FFT |
-| `LabSpace.Dataflow` | Graph validation/compilation, named-output execution, nested activations, register/feedback state and budgets |
+| `LabSpace.Dataflow` | Graph validation/compilation, bounded formula bytecode, named-output execution, nested activations, register/feedback state and budgets |
 | `LabSpace.Documents` | Versioned source-generated JSON, validation/migration and executable examples |
 | `LabSpace.Editing` | UI-independent editing, transactions, history, wiring, connector synchronization and debugging session |
 | `LabSpace.Skia` | Instrument/diagram rendering, geometry, cached previews, icons and plot decimation |
 | `LabSpace.Storage` | Host-neutral storage contract and protected recovery behavior |
-| `LabSpace.Controls` | Uno canvases, chrome, palette, Quick Drop, staged connector editor and property inspector |
+| `LabSpace.Controls` | Uno canvases, chrome, palette, Quick Drop, staged editors, cross-VI Debug window and property inspector |
 | `LabSpace.Workbench` | Complete reusable studio, commands, navigation, execution and recovery scheduling |
 
 All nine libraries are packable. NuGet packages and symbols are workflow artifacts; this does **not** imply publication to a public NuGet feed. The host application and tests are not library packages.
@@ -133,7 +139,7 @@ The release workflow packages all nine libraries and symbols, audits resolved Sk
 
 ## Files, safety and licensing
 
-Save projects as **`.labspace.json`**. Version-1 files migrate to version 2; older LabSpace 0.1 cannot read version-2 files. NI `.vi`, `.ctl` and `.lvproj` files are not imported. Local recovery is not a substitute for explicit saved copies. Imported JSON does not evaluate script or install drivers.
+Save projects as **`.labspace.json`**. Version-1 and version-2 files migrate to version 3. Earlier LabSpace releases cannot read version-3 files; retain original copies when migrating. NI `.vi`, `.ctl` and `.lvproj` files are not imported. Local recovery is not a substitute for explicit saved copies. Imported JSON does not evaluate script or install drivers.
 
 The application is intended for experimentation, education and component development. It is not validated for safety-critical equipment or physical/hard-real-time control.
 

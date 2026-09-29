@@ -7,18 +7,23 @@ namespace LabSpace.Skia;
 public sealed class DiagramRenderer(LabFonts fonts) : IDisposable
 {
     private readonly LabDrawing _d = new(fonts);
+    private readonly SKPath _selectorArrow = CreateSelectorArrow();
     private readonly Dictionary<string, (SKPoint[] Points, SKPath Path, SKColor Color, float Width)> _wires = [];
     private int _signature;
     private readonly Dictionary<string, SKPicture> _previews = [];
     private long _previewRevision = -1;
     private Diagram? _previewDiagram;
+    private int _previewSignature;
     public void Draw(SKCanvas c, InstrumentSession session, SKRect viewport, string? wiringFrom = null, SKPoint? pointer = null, SKRect? marquee = null, string wiringOutput = "result")
     {
         c.Clear(SKColors.White); var graph = session.Diagram; EnsureGeometry(graph);
-        if (_previewRevision != session.Revision || !ReferenceEquals(_previewDiagram, graph))
+        var previewHash = new HashCode();
+        foreach (var node in graph.Nodes.Where(n => NodeCatalog.Resolve(n).IsStructure)) { previewHash.Add(node.VisibleFrame); previewHash.Add(node.Width); previewHash.Add(node.Height); }
+        var previewSignature = previewHash.ToHashCode();
+        if (_previewRevision != session.Revision || !ReferenceEquals(_previewDiagram, graph) || previewSignature != _previewSignature)
         {
             foreach (var picture in _previews.Values) picture.Dispose(); _previews.Clear();
-            _previewRevision = session.Revision; _previewDiagram = graph;
+            _previewRevision = session.Revision; _previewDiagram = graph; _previewSignature = previewSignature;
         }
         // Visible-area grid only; work outside the viewport is never rasterized.
         var startX = Math.Floor(viewport.Left / 20) * 20; var startY = Math.Floor(viewport.Top / 20) * 20;
@@ -29,7 +34,7 @@ public sealed class DiagramRenderer(LabFonts fonts) : IDisposable
             if (session.SelectedWire == wire.Id) _d.Path(c, geometry.Path, LabDrawing.Color("#92BDEC"), 6);
             _d.Path(c, geometry.Path, geometry.Color, geometry.Width);
             var points = geometry.Points;
-            if (wire.Probe)
+            if (session.IsProbe(wire))
             {
                 var p = points[Math.Min(2, points.Length - 1)]; var value = session.OutputValue(wire.From, wire.Output)?.ToString() ?? "not executed";
                 var box = new SKRect(p.X + 7, p.Y - 25, p.X + 145, p.Y - 4); _d.Bevel(c, box, "#FFFFDA"); _d.Text(c, value.Length > 22 ? value[..21] + "…" : value, box.Left + 5, box.Top + 15, 11);
@@ -51,7 +56,7 @@ public sealed class DiagramRenderer(LabFonts fonts) : IDisposable
     private void EnsureGeometry(Diagram graph)
     {
         var hash = new HashCode(); hash.Add(graph);
-        foreach (var n in graph.Nodes) { hash.Add(n.Id); hash.Add(n.X); hash.Add(n.Y); hash.Add(n.Kind); hash.Add(n.Contract); hash.Add(n.DataType); }
+        foreach (var n in graph.Nodes) { hash.Add(n.Id); hash.Add(n.X); hash.Add(n.Y); hash.Add(n.Kind); hash.Add(n.Contract); hash.Add(n.DataType); hash.Add(n.Width); hash.Add(n.Height); hash.Add(n.Formula); }
         foreach (var w in graph.Wires) { hash.Add(w.Id); hash.Add(w.From); hash.Add(w.To); hash.Add(w.Input); hash.Add(w.Output); }
         var signature = hash.ToHashCode(); if (signature == _signature) return; _signature = signature;
         foreach (var wire in _wires.Values) wire.Path.Dispose(); _wires.Clear();
@@ -63,7 +68,7 @@ public sealed class DiagramRenderer(LabFonts fonts) : IDisposable
             var output = source.FindOutput(w.Output); if (output is null) continue;
             var index = Array.FindIndex(target.Inputs, p => p.Name == w.Input); if (index < 0) continue;
             var points = DiagramGeometry.Route(DiagramGeometry.Output(from, w.Output), DiagramGeometry.Input(to, index));
-            _wires[w.Id] = (points, BuildPath(points), output.Kind == target.Inputs[index].Kind ? LabDrawing.WireColor(output.Kind) : SKColors.Red, output.Kind is ValueKind.Array or ValueKind.Waveform ? 3.5f : 1.5f);
+            _wires[w.Id] = (points, BuildPath(points), output.Kind == target.Inputs[index].Kind ? LabDrawing.WireColor(output.Kind) : SKColors.Red, output.Kind is ValueKind.Array or ValueKind.Waveform or ValueKind.Error ? 3.5f : output.Kind == ValueKind.Complex ? 2.5f : 1.5f);
         }
     }
     private static SKPath BuildPath(SKPoint[] points) { var p = new SKPath(); p.MoveTo(points[0]); foreach (var point in points.Skip(1)) p.LineTo(point); return p; }
@@ -77,7 +82,7 @@ public sealed class DiagramRenderer(LabFonts fonts) : IDisposable
     {
         if (!NodeCatalog.TryGet(n.Kind, out var def)) { _d.Bevel(c, b, "#FFE1E1"); _d.Text(c, "Unknown function", b.Left + 4, b.MidY); return; }
         def = NodeCatalog.Resolve(n);
-        var selected = session.Selection.Contains(n.Id); var active = session.ActiveNode == n.Id && (session.Highlight || session.IsPaused);
+        var selected = session.Selection.Contains(n.Id); var active = session.DebuggingEnabled && session.ActiveNode == n.Id && session.DebugFrame?.Path == session.VisibleDebugPath && (session.Highlight || session.IsPaused);
         if (active) { var glow = b; glow.Inflate(7, 7); _d.Rect(c, glow, LabDrawing.Color("#FFF085")); }
         var label = n.Label.Length > 28 ? n.Label[..26] + "…" : n.Label;
         var labelX = def.IsControl ? b.Left - 8 - _d.Font(13).MeasureText(label) : def.IsIndicator ? b.Right + 8 : b.Left;
@@ -87,20 +92,38 @@ public sealed class DiagramRenderer(LabFonts fonts) : IDisposable
         if (def.IsStructure)
         {
             var inner = b; inner.Inflate(-6, -6); _d.Border(c, inner, LabDrawing.Color("#A9A9A9"), 4);
-            _d.Rect(c, b.MidX - 31, b.Top - 1, 62, 17, "#EFEFEF"); _d.Text(c, def.Glyph, b.MidX, b.Top + 12, 11, "#555555", true);
+            if (n.Kind == "sequence")
+                for (var x = b.Left + 10; x < b.Right - 10; x += 18) { _d.Rect(c, x, b.Top + 2, 9, 4, "#646464"); _d.Rect(c, x, b.Bottom - 6, 9, 4, "#646464"); }
+            if (StructureFrames.HasFrames(n))
+            {
+                var selector = new SKRect(b.MidX - 92, b.Top - 1, b.MidX + 92, b.Top + 19); _d.Bevel(c, selector, "#F2F2F2");
+                DrawSelectorArrow(c, selector.Left + 9, selector.MidY, false);
+                DrawSelectorArrow(c, selector.Right - 9, selector.MidY, true);
+                c.Save(); c.ClipRect(new(selector.Left + 20, selector.Top, selector.Right - 20, selector.Bottom)); _d.Text(c, StructureFrames.Caption(n), b.MidX, b.Top + 13, 11, "#333333", true); c.Restore();
+            }
+            else { _d.Rect(c, b.MidX - 31, b.Top - 1, 62, 17, "#EFEFEF"); _d.Text(c, def.Glyph, b.MidX, b.Top + 12, 11, "#555555", true); }
             DrawPreview(c, n, new(b.Left + 28, b.Top + 23, b.Right - 28, b.Bottom - 23));
-            _d.Text(c, n.Kind is "for" or "while" ? "i" : "VI", b.Left + 12, b.Bottom - 10, 11, "#226AB2");
+            if (n.Kind is "for" or "while" or "subvi") _d.Text(c, n.Kind == "subvi" ? "VI" : "i", b.Left + 12, b.Bottom - 10, 11, "#226AB2");
             if (n.Kind == "while" || n.Contract?.ConditionalFor == true) _d.Circle(c, b.Right - 15, b.Bottom - 14, 5, LabDrawing.Color("#B63028"));
-            _d.Text(c, $"{n.Body?.Nodes.Count ?? 0} nodes · double-click to edit", b.MidX, b.Bottom + 16, 10, "#707070", true);
+            _d.Text(c, $"{StructureFrames.VisibleBody(n)?.Nodes.Count ?? 0} nodes · double-click to edit", b.MidX, b.Bottom + 16, 10, "#707070", true);
+        }
+        else if (n.Kind == "formula")
+        {
+            _d.Bevel(c, b, "#FFFFFF", true); _d.Rect(c, b.Left + 3, b.Top + 3, b.Width - 6, 19, "#D7D7D7");
+            _d.Text(c, "Formula Node", b.Left + 9, b.Top + 17, 11, "#333333");
+            c.Save(); c.ClipRect(new(b.Left + 14, b.Top + 24, b.Right - 14, b.Bottom - 8));
+            var lines = n.Text.Replace("\r", "").Split('\n');
+            for (var line = 0; line < Math.Min(lines.Length, 32); line++) _d.Text(c, lines[line], b.Left + 18, b.Top + 42 + line * 18, 12, "#1A497B");
+            c.Restore();
         }
         else if (def.IsControl || def.IsIndicator)
         {
             var inside = b; inside.Inflate(-4, -4); _d.Border(c, inside, LabDrawing.WireColor(def.Output), def.IsControl ? 2 : 1);
-            _d.Text(c, def.Output == ValueKind.Waveform ? "~" : def.Output == ValueKind.Boolean ? "TF" : def.Output == ValueKind.String ? "abc" : def.Output == ValueKind.Array ? "[ ]" : "DBL", b.MidX, b.MidY + 4, 11, LabDrawing.WireColor(def.Output).ToString(), true);
+            _d.Text(c, def.Output == ValueKind.Error ? "err" : def.Output == ValueKind.Complex ? "CDB" : def.Output == ValueKind.Waveform ? "~" : def.Output == ValueKind.Boolean ? "TF" : def.Output == ValueKind.String ? "abc" : def.Output == ValueKind.Array ? "[ ]" : "DBL", b.MidX, b.MidY + 4, 11, LabDrawing.WireColor(def.Output).ToString(), true);
         }
-        else if (n.Kind is "constant" or "bool" or "string")
+        else if (n.Kind is "constant" or "bool" or "string" or "error-constant" or "complex")
         {
-            var value = n.Kind == "bool" ? (n.Value != 0 ? "TRUE" : "FALSE") : n.Kind == "string" ? n.Text : n.Value.ToString("G5", System.Globalization.CultureInfo.InvariantCulture);
+            var value = n.Kind == "error-constant" ? "err " + n.Value.ToString("G5") : n.Kind == "complex" ? n.Value.ToString("G4") + "+" + n.Parameter("imaginary", 0).ToString("G4") + "i" : n.Kind == "bool" ? (n.Value != 0 ? "TRUE" : "FALSE") : n.Kind == "string" ? n.Text : n.Value.ToString("G5", System.Globalization.CultureInfo.InvariantCulture);
             _d.Text(c, value.Length > 10 ? value[..9] + "…" : value, b.Left + 5, b.MidY + 4, 12);
             _d.Border(c, b, LabDrawing.WireColor(def.Output));
         }
@@ -116,16 +139,16 @@ public sealed class DiagramRenderer(LabFonts fonts) : IDisposable
             _d.Rect(c, rect, SKColors.White); _d.Border(c, rect, LabDrawing.WireColor(port.Kind), 1.7f);
             if (port.Name.StartsWith("initial:", StringComparison.Ordinal)) DrawRegister(c, p, port.Kind);
             else if (n.Contract?.Inputs.Any(t => t.Name == port.Name && t.Indexing) == true) _d.Line(c, p.X - 2, p.Y, p.X + 2, p.Y, LabDrawing.WireColor(port.Kind), 2);
-            if (selected || def.IsStructure) _d.Text(c, port.Name, p.X + 9, p.Y - 5, 9, "#525252");
+            if (selected || def.IsStructure || n.Kind == "formula") _d.Text(c, port.Name, p.X + 9, p.Y - 5, 9, "#525252");
         }
         for (var i = 0; i < def.Outputs.Length; i++)
         {
             var p = DiagramGeometry.Output(n, i); var output = def.Outputs[i];
             _d.Rect(c, new(p.X - 4, p.Y - 4, p.X + 4, p.Y + 4), LabDrawing.WireColor(output.Kind));
             if (n.Contract?.Registers.Any(r => r.Name == output.Name) == true) DrawRegister(c, p, output.Kind);
-            if (def.IsStructure) _d.Text(c, output.Name, p.X - 9 - _d.Font(9).MeasureText(output.Name), p.Y - 6, 9, "#525252");
+            if (def.IsStructure || n.Kind == "formula" || selected) _d.Text(c, output.Name, p.X - 9 - _d.Font(9).MeasureText(output.Name), p.Y - 6, 9, "#525252");
         }
-        if (n.Breakpoint) { _d.Circle(c, b.Left - 11, b.Top - 12, 6, LabDrawing.Color("#B52922")); _d.Circle(c, b.Left - 11, b.Top - 12, 6, SKColors.White, false); }
+        if (session.IsBreakpoint(n)) { _d.Circle(c, b.Left - 11, b.Top - 12, 6, LabDrawing.Color("#B52922")); _d.Circle(c, b.Left - 11, b.Top - 12, 6, SKColors.White, false); }
         if (session.Diagnostics.Any(d => d.NodeId == n.Id)) { _d.Line(c, b.Left, b.Bottom + 4, b.Right, b.Bottom + 4, LabDrawing.Color("#BD2727"), 2); }
         if (selected) _d.Selection(c, b);
     }
@@ -136,7 +159,7 @@ public sealed class DiagramRenderer(LabFonts fonts) : IDisposable
     }
     private void DrawPreview(SKCanvas canvas, Node owner, SKRect area)
     {
-        if (owner.Body is not { Nodes.Count: > 0 } body) return;
+        if (StructureFrames.VisibleBody(owner) is not { Nodes.Count: > 0 } body) return;
         if (!_previews.TryGetValue(owner.Id, out var picture))
         {
             using var recorder = new SKPictureRecorder();
@@ -168,10 +191,23 @@ public sealed class DiagramRenderer(LabFonts fonts) : IDisposable
         }
         canvas.Save(); canvas.ClipRect(area); canvas.Translate(area.Left, area.Top); canvas.DrawPicture(picture); canvas.Restore();
     }
+    private static SKPath CreateSelectorArrow()
+    {
+        // Original vector geometry avoids missing arrow glyphs on browser fonts.
+        var path = new SKPath();
+        path.MoveTo(-3, -4); path.LineTo(3, 0); path.LineTo(-3, 4); path.Close();
+        return path;
+    }
+    private void DrawSelectorArrow(SKCanvas canvas, float x, float y, bool right)
+    {
+        canvas.Save(); canvas.Translate(x, y); canvas.Scale(right ? 1 : -1, 1);
+        _d.Path(canvas, _selectorArrow, LabDrawing.Color("#333333"), fill: true);
+        canvas.Restore();
+    }
     public void DrawPlacement(SKCanvas canvas, Node node)
     {
         var b = DiagramGeometry.Bounds(node); _d.Rect(canvas, b, new SKColor(80, 135, 205, 25)); _d.Border(canvas, b, LabDrawing.Color("#3977B4"));
         _d.Text(canvas, NodeCatalog.Get(node.Kind).Title, b.Left, b.Top - 7, 12, "#3977B4");
     }
-    public void Dispose() { foreach (var picture in _previews.Values) picture.Dispose(); _previews.Clear(); foreach (var w in _wires.Values) w.Path.Dispose(); _wires.Clear(); _d.Dispose(); }
+    public void Dispose() { foreach (var picture in _previews.Values) picture.Dispose(); _previews.Clear(); foreach (var w in _wires.Values) w.Path.Dispose(); _wires.Clear(); _selectorArrow.Dispose(); _d.Dispose(); }
 }

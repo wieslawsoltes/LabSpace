@@ -63,7 +63,7 @@ Canvas accessibility remains a separate parity boundary: richer per-node/control
 
 ## Documents and limits
 
-Source-generated JSON accepts format 1 or 2 and migrates loaded version-1 projects to version 2. Format 2 stores contracts, connector types and named outputs. Old LabSpace 0.1 cannot load these files. Import does not evaluate code or install plugins. Unsupported kinds/types are rejected rather than approximated.
+Source-generated JSON accepts formats 1, 2 and 3 and migrates older projects to version 3. Format 3 adds frames, formula signatures and node sizes to contracts, connector types and named outputs. Earlier LabSpace releases cannot load version-3 files. Import does not execute external code or install plugins. Unsupported kinds/types are rejected rather than approximated.
 
 | Resource | Bound |
 | --- | --- |
@@ -91,3 +91,16 @@ Engine tests cover calculations, compilation, migration, transactions, named out
 Three-OS desktop builds, browser acceptance and source-provenance checks gate Pages. The same interactions run against the deployed application. Release packaging audits all nine libraries and matching native Skia assets. `tools/LabSpace.Benchmarks` records engine/FFT timings and allocation counts with machine/runtime metadata; those measurements do not represent GPU draw time, UI frame time or other machines.
 
 Full G types, linked/reentrant VIs, driver systems, native compilation and FPGA/real-time execution remain distinct future implementations, not capabilities implied by these abstractions. See [compatibility](compatibility.md).
+
+
+## Advanced execution (0.3)
+
+`CaseDispatchTable` compiles bounded label sets into immutable dispatch patterns with overlap/default validation. `CompiledNode.Frames` holds each independently validated child plan. Sequence compilation threads a typed local-symbol environment from writer frames into later reader frames; output ownership is unique across frames. `StructureActivation` creates child frames with stable frame-ID invocation paths, propagates locals after child completion and delays external sequence outputs until all children finish.
+
+`FormulaProgram` compiles a bounded scalar subset into forward-only bytecode. It tracks definitely assigned variables, checks names/arity/depth/token/instruction budgets, and implements short-circuit/ternary operators, bounded control flow, lexical scalar scopes and path-sensitive definite assignment. Evaluation uses instruction fuel and cancellation checks for backward branches as well as straight-line code. Programs are retained in graph plans; evaluation has isolated scalar slots and validates finite outputs. There is no native-code evaluation or ambient I/O.
+
+`ErrorCluster` and complex values extend immutable runtime values, defaults, named output kernels, wiring validation and rendering. Formats 1/2 migrate to 3. Staged editors own deep drafts; signatures/labels are validated before edits, and undo snapshots restore diagrams, connectors and external wires atomically. Frame visibility affects preview caching, never runtime dispatch. Root compilation remains authoritative when editing nested frames.
+
+## Cross-VI debugging and browser-storage validation
+
+See [Debugger](debugger.md) for session-only overrides, scoped retained values, activation navigation, bounds and reusable controls. Run `npm run test:storage` for dependency-free IndexedDB connection/transaction and file-picker lifecycle regressions. Recovery writes are acknowledged only when the transaction commits; malformed saved records are rejected rather than replaced with an empty project. Browsers remain subject to storage quota/eviction: keep explicit project saves.

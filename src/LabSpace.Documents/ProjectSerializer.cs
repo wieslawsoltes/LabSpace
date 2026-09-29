@@ -8,7 +8,7 @@ namespace LabSpace.Documents;
 public static class ProjectSerializer
 {
     public const int MaximumBytes = 8 * 1024 * 1024;
-    private static readonly HashSet<string> Widgets = ["Numeric", "Knob", "Slider", "Gauge", "LED", "Switch", "Graph", "Chart", "String", "Array"];
+    private static readonly HashSet<string> Widgets = ["Numeric", "Knob", "Slider", "Gauge", "LED", "Switch", "Graph", "Chart", "String", "Array", "Error", "Complex"];
     public static string Save(LabProject project)
     {
         Validate(project);
@@ -20,12 +20,12 @@ public static class ProjectSerializer
     {
         if (Encoding.UTF8.GetByteCount(json) > MaximumBytes) throw new InvalidDataException("Project exceeds the 8 MiB limit.");
         var project = JsonSerializer.Deserialize(json, ProjectJsonContext.Default.LabProject) ?? throw new InvalidDataException("Project is empty.");
-        Validate(project); project.FormatVersion = 2; return project;
+        Validate(project); project.FormatVersion = 3; return project;
     }
     public static LabProject Clone(LabProject project) => Load(Save(project));
     public static void Validate(LabProject project)
     {
-        if (project.FormatVersion is not (1 or 2)) throw new InvalidDataException("Unsupported LabSpace format version. NI .vi binaries are not supported.");
+        if (project.FormatVersion is not (1 or 2 or 3)) throw new InvalidDataException("Unsupported LabSpace format version. NI .vi binaries are not supported.");
         if (project.Instruments is null || project.Instruments.Count is < 1 or > 64 || string.IsNullOrWhiteSpace(project.Name)) throw new InvalidDataException("A project must have a name and 1–64 VIs.");
         var ids = new HashSet<string>(); var total = 0;
         foreach (var vi in project.Instruments)
@@ -52,6 +52,22 @@ public static class ProjectSerializer
             if (!NodeCatalog.TryGet(node.Kind, out _)) throw new InvalidDataException($"Unsupported function '{node.Kind}'. This project requires an unavailable function; no changes were imported.");
             if (!Enum.IsDefined(node.DataType)) throw new InvalidDataException("Unsupported connector data type.");
             if (node.Contract is { } contract) ValidateContract(contract);
+            if (!Finite(node.Width, node.Height) || node.Width is < 0 or > 10000 || node.Height is < 0 or > 10000)
+                throw new InvalidDataException("Invalid diagram node size.");
+            if (node.Formula is { } formula && (node.Kind != "formula" || formula.Inputs.IsDefault || formula.Outputs.IsDefault
+                || formula.Inputs.Length > 32 || formula.Outputs.Length is < 1 or > 32
+                || formula.Inputs.Concat(formula.Outputs).Any(n => !StructureFrames.Identifier(n))))
+                throw new InvalidDataException("Invalid formula signature.");
+            if (node.Frames is null || node.Frames.Count > 64 || (node.Frames.Count > 0 && !StructureFrames.HasFrames(node))
+                || node.VisibleFrame < 0 || (node.Frames.Count > 0 && node.VisibleFrame >= node.Frames.Count))
+                throw new InvalidDataException("Invalid structure frame collection.");
+            var frames = new HashSet<string>(StringComparer.Ordinal);
+            foreach (var frame in node.Frames)
+            {
+                if (frame is null || string.IsNullOrWhiteSpace(frame.Id) || !frames.Add(frame.Id) || frame.Label is null || frame.Label.Length > 4096)
+                    throw new InvalidDataException("Invalid or duplicate structure frame.");
+                Check(frame.Diagram, depth + 1, ref total);
+            }
             if (node.Text.Length > 1000000 || node.Label.Length > 4096 || Math.Abs(node.X) > 1000000 || Math.Abs(node.Y) > 1000000) throw new InvalidDataException("Node payload exceeds the limit.");
             if (node.Body is not null) Check(node.Body, depth + 1, ref total);
             if (node.Alternative is not null) Check(node.Alternative, depth + 1, ref total);

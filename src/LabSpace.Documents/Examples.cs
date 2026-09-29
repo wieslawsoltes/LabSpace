@@ -4,7 +4,7 @@ namespace LabSpace.Documents;
 
 public static class Examples
 {
-    public static LabProject Create() => new() { Name = "Signal analysis.lvproj", Instruments = [SignalAnalysis(), Arithmetic(), Loop(), StructuredExamples.IndexedAccumulator()] };
+    public static LabProject Create() => new() { Name = "Signal analysis.lvproj", Instruments = [SignalAnalysis(), Arithmetic(), Loop(), StructuredExamples.IndexedAccumulator(), AdvancedExamples.CaseDispatch(), AdvancedExamples.Sequence(), AdvancedExamples.ErrorsAndComplex(), FormulaExamples.ControlFlow()] };
     public static VirtualInstrument Blank(string name = "Untitled.vi") => new() { Name = name, Description = "Add controls and functions, wire compatible terminals, then Run." };
     public static Node NewNode(string kind, double x, double y)
     {
@@ -14,6 +14,7 @@ public static class Examples
         if (kind == "array") n.Text = "1, 2, 3, 4, 5";
         if (kind == "input") n.Text = "state";
         if (d.IsStructure) { n.Body = StructureBody(kind == "while"); if (kind == "case") n.Alternative = StructureBody(false, 2); }
+        AdvancedExamples.Initialize(n);
         return n;
     }
     public static Diagram StructureBody(bool stop, double increment = 1)

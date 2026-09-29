@@ -32,6 +32,24 @@ public sealed class PanelRenderer : IDisposable
             var body = new SKRect(r.Left, r.Top + 22, r.Right, r.Bottom);
             switch (item.Widget)
             {
+                case "Error":
+                    var error = def.IsControl ? new ErrorCluster(node.Parameter("status", 0) != 0, (int)node.Value, node.Text) : output?.Error ?? ErrorCluster.None;
+                    _d.Bevel(c, body, "#D4D4D4"); c.Save(); c.ClipRect(body);
+                    _d.Text(c, "status", body.Left + 9, body.Top + 19, 11); _d.Circle(c, body.Left + 58, body.Top + 15, 7, LabDrawing.Color(error.Status ? "#BD3026" : "#407D31"));
+                    _d.Text(c, "code", body.Left + 85, body.Top + 19, 11); _d.Bevel(c, new(body.Left + 118, body.Top + 4, body.Right - 8, body.Top + 30), def.IsControl ? "#FFFFFF" : "#EEEEEE", true);
+                    _d.Text(c, error.Code.ToString(CultureInfo.InvariantCulture), body.Left + 125, body.Top + 22, 14);
+                    _d.Text(c, "source", body.Left + 9, body.Top + 47, 11); _d.Bevel(c, new(body.Left + 8, body.Top + 53, body.Right - 8, body.Bottom - 8), def.IsControl ? "#FFFFFF" : "#EEEEEE", true);
+                    var lines = error.Source.Replace("\r", "").Split('\n');
+                    for (var line = 0; line < Math.Min(lines.Length, 3); line++) _d.Text(c, lines[line], body.Left + 14, body.Top + 71 + line * 16, 12);
+                    c.Restore(); break;
+                case "Complex":
+                    var number = def.IsControl ? new System.Numerics.Complex(node.Value, node.Parameter("imaginary", 0)) : output?.Complex ?? System.Numerics.Complex.Zero;
+                    _d.Bevel(c, body, "#D4D4D4"); c.Save(); c.ClipRect(body);
+                    _d.Text(c, "Real", body.Left + 9, body.Top + 18, 11); _d.Text(c, "Imaginary", body.MidX + 9, body.Top + 18, 11);
+                    _d.Bevel(c, new(body.Left + 8, body.Top + 24, body.MidX - 5, body.Bottom - 8), def.IsControl ? "#FFFFFF" : "#EEEEEE", true);
+                    _d.Bevel(c, new(body.MidX + 5, body.Top + 24, body.Right - 8, body.Bottom - 8), def.IsControl ? "#FFFFFF" : "#EEEEEE", true);
+                    _d.Text(c, number.Real.ToString("G7", CultureInfo.InvariantCulture), body.Left + 14, body.Top + 48, 18);
+                    _d.Text(c, number.Imaginary.ToString("G7", CultureInfo.InvariantCulture) + " i", body.MidX + 11, body.Top + 48, 18); c.Restore(); break;
                 case "Graph": case "Chart":
                     double[]? history = null;
                     if (node.Kind == "chart" && session.ChartHistory.TryGetValue(node.Id, out var queue))

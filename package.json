@@ -1,8 +1,14 @@
 {
   "name": "labspace-browser-tests",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "private": true,
   "type": "module",
-  "scripts": { "test:browser": "playwright test" },
-  "devDependencies": { "@playwright/test": "1.56.1", "pngjs": "7.0.0" }
+  "scripts": {
+    "test:browser": "playwright test",
+    "test:storage": "node --test tests/storage/*.test.mjs"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.56.1",
+    "pngjs": "7.0.0"
+  }
 }

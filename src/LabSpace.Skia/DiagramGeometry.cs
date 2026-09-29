@@ -9,9 +9,15 @@ public static class DiagramGeometry
     {
         if (!NodeCatalog.TryGet(n.Kind, out var d)) return new((float)n.X, (float)n.Y, (float)n.X + 100, (float)n.Y + 60);
         d = NodeCatalog.Resolve(n);
-        var literal = n.Kind is "constant" or "bool" or "string";
-        var w = d.IsStructure ? 280 : n.Kind == "simulate" ? 118 : d.IsControl || d.IsIndicator ? 40 : literal ? 72 : 48;
-        var h = d.IsStructure ? Math.Max(190, 20 + Math.Max(d.Inputs.Length, d.Outputs.Length) * 24) : n.Kind == "simulate" ? 78 : literal ? 28 : d.IsControl || d.IsIndicator ? 32 : 48;
+        var literal = n.Kind is "constant" or "bool" or "string" or "error-constant" or "complex";
+        var w = n.Kind == "formula" ? 270 : d.IsStructure ? 280 : n.Kind == "simulate" ? 118 : d.IsControl || d.IsIndicator ? 40 : literal ? 72 : 48;
+        var h = n.Kind == "formula" ? 160 : d.IsStructure ? Math.Max(190, 20 + Math.Max(d.Inputs.Length, d.Outputs.Length) * 24) : n.Kind == "simulate" ? 78 : literal ? 28 : d.IsControl || d.IsIndicator ? 32 : 48;
+        h = Math.Max(h, (Math.Max(d.Inputs.Length, d.Outputs.Length) + 1) * 16);
+        if (d.IsStructure || n.Kind == "formula")
+        {
+            if (n.Width > 0) w = (int)Math.Max(n.Kind == "formula" ? 200 : 240, n.Width);
+            if (n.Height > 0) h = (int)Math.Max(Math.Max(d.Inputs.Length, d.Outputs.Length) * 24 + 30, Math.Max(n.Kind == "formula" ? 100 : 160, n.Height));
+        }
         return new((float)n.X, (float)n.Y, (float)n.X + w, (float)n.Y + h);
     }
     public static SKPoint Output(Node n, int index = 0)

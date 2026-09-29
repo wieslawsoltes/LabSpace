@@ -21,6 +21,8 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
+      - name: Verify browser storage lifecycle
+        run: node --test tests/storage/*.test.mjs
       - name: Install toolchain and verified OFL assets
         run: |
           dotnet workload install wasm-tools --skip-manifest-update
