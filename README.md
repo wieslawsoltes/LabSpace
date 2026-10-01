@@ -4,7 +4,7 @@
 
 **A graphical instrumentation studio for desktop and the browser.**
 
-Build front panels, connect typed block diagrams, inspect live values and run simulated signal-processing programs in a shared Uno Platform application.
+Build front panels, connect typed block diagrams, inspect live values and run simulated signal-processing programs in a shared [Uno Platform](https://platform.uno) application.
 
 [Open the studio](https://wieslawsoltes.github.io/LabSpace/) · [User guide](docs/user-guide.md) · [Typed structures](docs/typed-structures.md) · [Architecture](docs/architecture.md) · [Compatibility](docs/compatibility.md)
 
